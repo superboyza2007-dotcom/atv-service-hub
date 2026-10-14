@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="ATV Operations">
+  <rect width="128" height="128" rx="26" fill="#10191b"/>
+  <circle cx="64" cy="60" r="40" fill="none" stroke="#2b3b3d" stroke-width="3"/>
+  <path d="M64 11v10M64 99v10M15 60h10M103 60h10" stroke="#b7f34a" stroke-width="4" stroke-linecap="round"/>
+  <path d="M38 79 50 43h27l13 36M46 66h36" fill="none" stroke="#b7f34a" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="39" cy="87" r="9" fill="#10191b" stroke="#eaf1e7" stroke-width="4"/>
+  <circle cx="89" cy="87" r="9" fill="#10191b" stroke="#eaf1e7" stroke-width="4"/>
+  <circle cx="64" cy="60" r="3" fill="#eaf1e7"/>
+</svg>

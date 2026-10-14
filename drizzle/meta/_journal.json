@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1790551464678,
+      "tag": "0000_ancient_callisto",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1790553845835,
+      "tag": "0001_greedy_gorgon",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1790557000000,
+      "tag": "0002_repair_ready_transition",
+      "breakpoints": true
+    }
+  ]
+}
