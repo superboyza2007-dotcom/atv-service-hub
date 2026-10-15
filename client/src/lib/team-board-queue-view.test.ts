@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { BoardMember } from "./team-board-queue-engine";
-import { groupStandbyByAdjacentTeam } from "./team-board-queue-view";
+import { createQueueState, type BoardMember } from "./team-board-queue-engine";
+import { groupStandbyByAdjacentTeam, groupStandbyCardItems, selectStandbyCardItems } from "./team-board-queue-view";
 
 const member = (id: string, teamId: string, boardOrder: number): BoardMember => ({
   id,
@@ -28,5 +28,33 @@ describe("Team Board queue view", () => {
       ["returned"],
     ]);
     expect(groups.flat().map(item => item.id)).toEqual(["partner", "next", "returned"]);
+  });
+
+  it("projects the same Standby members and team pairings as 02 / CARD", () => {
+    const dp = { ...member("dp", "team-dp", 4), role: "dp" as const };
+    const wk = { ...member("wk", "team-wk", 5), role: "wk" as const };
+    const floating = { ...member("floating", "team-floating", 6), role: "floating" as const };
+    const shadow = { ...member("shadow", "team-shadow", 7), role: "floating" as const, isShadow: true };
+    const state = createQueueState([
+      member("a1", "team-a", 1),
+      member("b1", "team-b", 2),
+      member("a2", "team-a", 3),
+      dp,
+      wk,
+      floating,
+      shadow,
+    ]);
+    state.standby = ["a1", "b1", "a2", "dp", "wk", "floating", "shadow"];
+
+    const items = selectStandbyCardItems(state);
+
+    expect(items.map(item => item.id)).toEqual(["a1", "b1", "a2", "dp", "wk", "shadow"]);
+    expect(groupStandbyCardItems(items).map(group => group.map(item => item.id))).toEqual([
+      ["a1", "a2"],
+      ["b1"],
+      ["dp"],
+      ["wk"],
+      ["shadow"],
+    ]);
   });
 });
