@@ -13802,128 +13802,40 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
   .m3-guide-21-input .m3-guide-21-vehicle-tile .m3-lot-number-wrap { gap: 2px; }
 }
 
-/* Future Dice — server-authoritative operational mini-game. */
-.future-dice-panel {
-  width: min(820px, 100%);
-  margin: 0 auto;
-  padding: 18px;
-  border: 1px solid rgba(121, 242, 208, .36);
-  border-top: 4px solid #79f2d0;
-  border-radius: 14px;
-  background: #101923;
-  color: #e7fbff;
-  box-shadow: 0 14px 34px rgba(3, 12, 18, .32), inset 0 0 0 1px rgba(121, 242, 208, .06);
-}
-.future-dice-heading,
-.future-dice-create-heading,
-.future-session-meta,
-.future-dice-footer,
-.future-history > div,
-.future-session-actions,
-.future-score-row,
-.future-dice-result {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.future-dice-heading { padding: 0 0 14px; border-bottom: 1px solid rgba(121, 242, 208, .22); }
-.future-dice-heading p,
-.future-dice-create-heading p { margin: 0 0 4px; color: #79f2d0; font: 800 10px/1.2 "IBM Plex Mono", monospace; letter-spacing: .12em; }
-.future-dice-heading h2,
-.future-dice-create-heading h3 { margin: 0; color: #f2ffff; }
-.future-dice-heading h2 { font-size: clamp(21px, 4vw, 28px); }
-.future-dice-heading span { display: block; max-width: 610px; margin-top: 5px; color: #9fc5c9; font-size: 12px; line-height: 1.5; }
-.future-dice-heading > svg { flex: 0 0 auto; color: #79f2d0; }
-.future-dice-create { margin-top: 14px; padding: 14px; border: 1px solid rgba(193, 167, 255, .3); border-radius: 10px; background: #172a35; }
-.future-dice-create-heading { margin-bottom: 12px; }
-.future-dice-create-heading h3 { font-size: 16px; }
-.future-dice-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
-.future-dice-options fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
-.future-dice-options legend { margin: 0 0 6px; color: #9fc5c9; font-size: 11px; font-weight: 700; }
-.future-choice-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.future-choice-row button,
-.future-result-actions button,
-.future-history button,
-.future-dice-footer button,
-.future-dice-error button,
-.future-cancel-button {
-  min-height: 34px;
-  padding: 6px 8px;
-  border: 1px solid rgba(142, 215, 255, .32);
-  border-radius: 6px;
-  background: #0d1820;
-  color: #b9d9dc;
-  font: 700 11px/1.1 "IBM Plex Mono", monospace;
-  cursor: pointer;
-}
-.future-choice-row button:hover,
-.future-result-actions button:hover,
-.future-history button:hover,
-.future-dice-footer button:hover,
-.future-dice-error button:hover { border-color: #79f2d0; color: #f0ffff; background: rgba(121, 242, 208, .12); }
-.future-choice-row button.selected,
-.future-result-actions button.selected,
-.future-history button.selected { border-color: #c1fff2; background: #79f2d0; color: #062b31; box-shadow: 0 0 12px rgba(121, 242, 208, .25); }
-.future-player-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.future-player-picker label { display: grid; gap: 5px; min-width: 0; color: #c9e8dd; font-size: 11px; }
-.future-player-picker label > span { display: flex; align-items: center; gap: 6px; }
-.future-player-picker b { display: inline-grid; min-width: 25px; place-items: center; padding: 3px; border: 1px solid rgba(193, 167, 255, .5); border-radius: 4px; color: #d9cbff; font: 800 10px "IBM Plex Mono", monospace; }
-.future-player-picker select { width: 100%; min-width: 0; min-height: 38px; padding: 6px 8px; border: 1px solid rgba(142, 215, 255, .3); border-radius: 6px; outline: none; background: #0d1820; color: #e7fbff; font: 600 12px "IBM Plex Sans Thai", sans-serif; }
-.future-player-picker select:focus { border-color: #79f2d0; box-shadow: 0 0 0 3px rgba(121, 242, 208, .12); }
-.future-dice-validation { margin: 10px 0 0; color: #ffb0a5; font-size: 11px; }
-.future-dice-session { margin-top: 14px; padding: 13px; border: 1px solid rgba(142, 215, 255, .28); border-radius: 10px; background: #172a35; }
-.future-dice-session.is-completed { border-color: rgba(201, 238, 123, .45); }
-.future-dice-session.is-cancelled { border-color: rgba(255, 155, 145, .36); opacity: .82; }
-.future-session-meta { align-items: flex-start; margin-bottom: 11px; }
-.future-session-meta > div { display: grid; gap: 3px; }
-.future-session-meta span { color: #8ed7ff; font: 800 10px/1 "IBM Plex Mono", monospace; letter-spacing: .08em; }
-.future-session-meta b { color: #f0ffff; font-size: 14px; }
-.future-session-meta small { max-width: 52%; color: #9fc5c9; font-size: 10px; text-align: right; line-height: 1.35; }
-.future-dice-board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.future-dice-player { min-width: 0; padding: 10px; border: 1px solid rgba(142, 215, 255, .2); border-radius: 7px; background: #0d1820; }
-.future-dice-player.active { border-color: #79f2d0; box-shadow: 0 0 0 1px rgba(121, 242, 208, .16), 0 0 15px rgba(121, 242, 208, .09); }
-.future-dice-player > div { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 7px; }
-.future-dice-player b { color: #79f2d0; font: 800 11px "IBM Plex Mono", monospace; }
-.future-dice-player span { overflow: hidden; color: #e7fbff; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.future-dice-player strong { display: block; margin: 12px 0 5px; color: #fff; font: 800 22px/1 "IBM Plex Mono", monospace; letter-spacing: .08em; }
-.future-dice-player small { display: block; overflow: hidden; color: #9fc5c9; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.future-score-row { margin-top: 9px; padding: 8px 10px; border: 1px solid rgba(193, 167, 255, .2); border-radius: 6px; background: rgba(193, 167, 255, .08); }
-.future-score-row span { color: #b7cfce; font-size: 11px; }
-.future-score-row b { margin-left: 5px; color: #f0ffff; font: 800 16px "IBM Plex Mono", monospace; }
-.future-session-actions { align-items: stretch; margin-top: 10px; }
-.future-roll-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; width: 100%; min-height: 44px; margin-top: 12px; border: 1px solid #c1fff2; border-radius: 7px; background: #2b9a51; color: #fff; font-size: 13px; font-weight: 800; cursor: pointer; }
-.future-session-actions .future-roll-button { flex: 1; margin: 0; }
-.future-roll-button:hover:not(:disabled) { background: #35b25f; box-shadow: 0 0 18px rgba(121, 242, 208, .18); }
-.future-roll-button:disabled,
-.future-result-actions button:disabled,
-.future-cancel-button:disabled { cursor: not-allowed; opacity: .55; }
-.future-cancel-button { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; border-color: rgba(255, 155, 145, .48); color: #ffb0a5; }
-.future-dice-result { align-items: flex-start; margin-top: 10px; padding: 11px; border: 1px solid rgba(201, 238, 123, .36); border-radius: 7px; background: rgba(201, 238, 123, .08); }
-.future-dice-result > svg { flex: 0 0 auto; color: #c9ee7b; }
-.future-dice-result > div:not(.future-result-actions) { flex: 1; }
-.future-dice-result b { display: block; color: #e9ffc5; font-size: 15px; }
-.future-dice-result span { display: block; margin-top: 3px; color: #c1d4c0; font-size: 11px; }
-.future-result-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; min-width: 124px; }
-.future-dice-cancelled { display: flex; align-items: center; gap: 7px; margin-top: 10px; color: #ffb0a5; font-size: 11px; }
-.future-history { display: grid; gap: 7px; margin-top: 13px; padding-top: 12px; border-top: 1px solid rgba(142, 215, 255, .16); }
-.future-history > span { color: #9fc5c9; font: 700 10px "IBM Plex Mono", monospace; letter-spacing: .08em; }
-.future-history > div { justify-content: flex-start; flex-wrap: wrap; }
-.future-history button { min-height: 28px; padding: 4px 7px; font-size: 9px; }
-.future-dice-empty { margin-top: 14px; padding: 24px; border: 1px dashed rgba(142, 215, 255, .3); border-radius: 9px; color: #9fc5c9; text-align: center; font-size: 12px; }
-.future-dice-error { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 14px; padding: 10px; border-left: 3px solid #ff9b91; background: rgba(255, 155, 145, .08); color: #ffb0a5; font-size: 12px; }
-.future-dice-error button { min-height: 28px; margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
-.future-dice-notice { margin: 12px 0 0; padding: 8px 10px; border-left: 3px solid #79f2d0; background: rgba(121, 242, 208, .08); color: #c8f8ea; font-size: 11px; line-height: 1.45; }
-.future-dice-footer { margin-top: 13px; color: #9fc5c9; font-size: 10px; }
-.future-dice-footer button { min-height: 28px; display: inline-flex; align-items: center; gap: 4px; }
-@media (max-width: 600px) {
+/* Future mini-game tab */
+.future-dice-panel { max-width: 760px; margin: 0 auto; padding: 18px; border: 1px solid rgba(84, 130, 103, .55); border-radius: 14px; background: linear-gradient(145deg, rgba(12, 31, 29, .96), rgba(8, 20, 24, .98)); color: #e9f5eb; box-shadow: 0 16px 34px rgba(0, 0, 0, .18); }
+.future-dice-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 14px; border-bottom: 1px solid rgba(126, 193, 143, .22); }
+.future-dice-heading p { margin: 0 0 4px; color: #78d48e; font-size: 10px; letter-spacing: .14em; font-weight: 800; }
+.future-dice-heading h2 { margin: 0; color: #f4fff4; font-size: clamp(21px, 4vw, 28px); }
+.future-dice-heading span { display: block; margin-top: 5px; color: #9eb5a5; font-size: 12px; }
+.future-dice-heading > svg { color: #79e695; flex: 0 0 auto; }
+.future-dice-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
+.future-dice-options > div > span { display: block; margin-bottom: 5px; color: #9eb5a5; font-size: 11px; font-weight: 700; }
+.future-choice-row { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.future-choice-row button, .future-result-actions button { min-height: 36px; border: 1px solid rgba(126, 193, 143, .38); border-radius: 7px; background: rgba(23, 55, 45, .8); color: #b9cfbd; font-size: 12px; font-weight: 800; }
+.future-choice-row button.selected, .future-result-actions button.selected { border-color: #73e18a; background: rgba(41, 139, 71, .45); color: #f2fff3; }
+.future-dice-board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px; border: 1px solid rgba(126, 193, 143, .3); border-radius: 10px; background: rgba(5, 16, 19, .72); }
+.future-dice-player { min-width: 0; padding: 10px; border: 1px solid rgba(126, 193, 143, .22); border-radius: 8px; background: rgba(20, 40, 38, .82); }
+.future-dice-player.active { border-color: #76df8b; box-shadow: 0 0 0 1px rgba(118, 223, 139, .18); }
+.future-dice-player > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.future-dice-player b { color: #75df8b; font-size: 12px; }
+.future-dice-player span { overflow: hidden; color: #edf8ef; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.future-dice-player strong { display: block; margin: 11px 0 6px; color: #fff; font-size: 22px; letter-spacing: .08em; }
+.future-dice-player small { color: #9eb5a5; font-size: 10px; }
+.future-roll-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; width: 100%; min-height: 46px; margin-top: 12px; border: 1px solid #70df87; border-radius: 8px; background: #2b9a51; color: #fff; font-size: 14px; font-weight: 900; }
+.future-roll-button:disabled { cursor: not-allowed; opacity: .55; }
+.future-dice-result { margin-top: 12px; padding: 12px; border: 1px solid rgba(126, 193, 143, .38); border-radius: 8px; background: rgba(41, 111, 64, .22); text-align: center; }
+.future-dice-result b { display: block; color: #b9ffbd; font-size: 18px; }
+.future-dice-result > span { display: block; margin-top: 4px; color: #d3e7d5; font-size: 12px; }
+.future-result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+.future-dice-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; color: #8fa898; font-size: 10px; }
+.future-dice-footer button { display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px; border: 1px solid rgba(126, 193, 143, .35); border-radius: 6px; background: transparent; color: #b9cfbd; font-size: 10px; }
+@media (max-width: 520px) {
   .future-dice-panel { padding: 13px; }
-  .future-dice-options,
-  .future-player-picker { grid-template-columns: 1fr; }
-  .future-dice-result { flex-wrap: wrap; }
-  .future-result-actions { width: 100%; min-width: 0; }
-  .future-session-actions { flex-direction: column; }
-  .future-cancel-button { justify-content: center; }
-  .future-session-meta { align-items: flex-start; flex-direction: column; }
-  .future-session-meta small { max-width: none; text-align: left; }
+  .future-dice-heading span { max-width: 230px; }
+  .future-dice-options { gap: 7px; }
+  .future-dice-board { gap: 6px; padding: 7px; }
+  .future-dice-player { padding: 8px 7px; }
+  .future-dice-player strong { font-size: 18px; }
+  .future-dice-footer { align-items: flex-start; flex-direction: column; }
 }

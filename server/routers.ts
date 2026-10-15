@@ -23,7 +23,7 @@ import {
 } from "./vehicleFlowService";
 import { completeNextActiveQueue, reconcileActiveQueue } from "./activeQueueMirror";
 import { isRepairLogSheetConfigured, repairLogPayloadSchema, submitRepairLogSheetPayload } from "./repairLogGoogleSheets";
-import { cancelFutureDiceSession, chooseFutureDiceOutcome, createFutureDiceSession, isFutureDiceRuleError, listFutureDiceSessions, rollFutureDice, type FutureDiceActor } from "./futureDiceService";
+import { cancelFutureDiceSession, chooseFutureDiceOutcome, createFutureDiceSession, isFutureDiceRuleError, listFutureDiceSessions, rollFutureDice, setFutureDiceOutcomeType, type FutureDiceActor } from "./futureDiceService";
 
 const vehicleActor = (user: { id: number; role: "user" | "guide" | "mechanic" | "supervisor" | "admin" }) => ({
   id: user.id,
@@ -191,6 +191,18 @@ export const appRouter = router({
         const session = await chooseFutureDiceOutcome(input);
         await announceFutureDice(ctx, `Future Dice #${session.id} · ทีม ${session.winningTeam} เลือกผลลัพธ์ ${session.selectedOutcome}`);
         return session;
+      } catch (error) {
+        return throwFutureDiceError(error);
+      }
+    }),
+    setOutcomeType: appProtectedProcedure.input(z.object({
+      sessionId: z.number().int().positive(),
+      outcomeType: z.enum(["minutes", "go_no_go"]),
+    })).mutation(async ({ ctx, input }) => {
+      const actor = futureDiceActorFromContext(ctx);
+      if (!actor.isSupervisor) throw new TRPCError({ code: "FORBIDDEN", message: "เฉพาะหัวหน้าหรือสิทธิ์พิเศษเท่านั้นที่เลือกผลลัพธ์ได้" });
+      try {
+        return await setFutureDiceOutcomeType(input);
       } catch (error) {
         return throwFutureDiceError(error);
       }

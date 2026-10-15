@@ -1,130 +1,188 @@
 import { useEffect, useMemo, useState } from "react";
-import { CircleAlert, Dices, Plus, RefreshCw, RotateCcw, Trophy, X } from "lucide-react";
+import { Dices, RotateCcw } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
-type DirectoryUser = { id: number; name: string; group?: string };
-type GameMode = "one_vs_one" | "two_vs_two";
-type OutcomeType = "minutes" | "go_no_go";
+type Mode = "1v1" | "2v2";
 type Slot = "A1" | "B1" | "A2" | "B2";
-
-const slotsForMode = (mode: GameMode): Slot[] => mode === "one_vs_one" ? ["A1", "B1"] : ["A1", "B1", "A2", "B2"];
-const outcomeChoices = (outcomeType: OutcomeType) => outcomeType === "minutes" ? ["30", "60"] : ["ไป", "ไม่ไป"];
-const modeLabel = (mode: GameMode) => mode === "one_vs_one" ? "1v1" : "2v2";
-
-function formatDate(value: Date | string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("th-TH", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Bangkok" }).format(date);
+type Choice = "30/60" | "ไป/ไม่ไป";
+type DirectoryUser = { id: number; name: string; group?: string };
+const order: Slot[] = ["A1", "B1", "A2", "B2"];
+const placeholders: Record<Slot, string> = { A1: "นาย A", B1: "นาย B", A2: "นาย C", B2: "นาย D" };
+function dicePair(values: [number, number] | undefined) {
+  return values ? `${values[0]} + ${values[1]}` : "— + —";
 }
-
-function errorMessage(error: unknown) {
-  return error instanceof Error && error.message ? error.message : "ทำรายการไม่สำเร็จ กรุณาลองใหม่";
+function apiMode(mode: Mode): "one_vs_one" | "two_vs_two" {
+  return mode === "1v1" ? "one_vs_one" : "two_vs_two";
+}
+function apiOutcome(choice: Choice): "minutes" | "go_no_go" {
+  return choice === "30/60" ? "minutes" : "go_no_go";
+}
+function displayMode(mode: "one_vs_one" | "two_vs_two"): Mode {
+  return mode === "one_vs_one" ? "1v1" : "2v2";
+}
+function displayChoice(type: "minutes" | "go_no_go"): Choice {
+  return type === "minutes" ? "30/60" : "ไป/ไม่ไป";
+}
+function messageOf(error: unknown) {
+  return error instanceof Error ? error.message : "ทำรายการไม่สำเร็จ กรุณาลองอีกครั้ง";
 }
 
 export default function FutureDiceGame({ users }: { users: DirectoryUser[] }) {
   const utils = trpc.useUtils();
-  const [gameMode, setGameMode] = useState<GameMode>("one_vs_one");
-  const [outcomeType, setOutcomeType] = useState<OutcomeType>("minutes");
-  const [selectedPlayers, setSelectedPlayers] = useState<Record<Slot, string>>({ A1: "", B1: "", A2: "", B2: "" });
-  const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
-  const [notice, setNotice] = useState("");
+  const sessionsQuery = trpc.futureDice.list.useQuery({ limit: 30 }, { retry: false, refetchInterval: 1_000, refetchOnWindowFocus: true });
+  const sessions = sessionsQuery.data ?? [];
+  const [mode, setMode] = useState<Mode>("1v1");
+  const [choice, setChoice] = useState<Choice>("30/60");
+  const [selectedResult, setSelectedResult] = useState<string>();
+  const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
+  const [ignoredOpenSessionId, setIgnoredOpenSessionId] = useState<number | null>(null);
+  const [latestSession, setLatestSession] = useState<(typeof sessions)[number] | null>(null);
+  const [error, setError] = useState("");
 
-  const sessionsQuery = trpc.futureDice.list.useQuery(undefined, { retry: false, refetchInterval: 1_000, refetchOnWindowFocus: true });
+  const eligibleUsers = useMemo(() => {
+    const operational = users.filter(user => /ไกด์|ช่าง|guide|mechanic/i.test(user.group ?? ""));
+    return (operational.length ? operational : users).slice().sort((a, b) => a.id - b.id);
+  }, [users]);
+  const openSession = sessions.find(session => session.status === "open" && session.id !== ignoredOpenSessionId);
+  const activeSession = (activeSessionId ? sessions.find(session => session.id === activeSessionId) : undefined)
+    ?? (latestSession?.id === activeSessionId ? latestSession : undefined)
+    ?? openSession;
+  const visibleSlots = mode === "2v2" ? order : ["A1", "B1"] as Slot[];
+  const directoryUserIds = eligibleUsers.slice(0, visibleSlots.length).map(user => user.id);
+  const rosterBySlot = useMemo(() => {
+    const assigned = activeSession?.players ?? [];
+    return Object.fromEntries(visibleSlots.map((slot, index) => {
+      const serverPlayer = assigned.find(player => player.slot === slot);
+      return [slot, serverPlayer?.name ?? eligibleUsers[index]?.name ?? placeholders[slot]];
+    })) as Record<Slot, string>;
+  }, [activeSession, eligibleUsers, visibleSlots]);
+  const rolls = useMemo(() => Object.fromEntries((activeSession?.players ?? []).flatMap(player => player.roll ? [[player.slot, [player.roll.dieOne, player.roll.dieTwo] as [number, number]]] : [])) as Partial<Record<Slot, [number, number]>>, [activeSession]);
+  const currentSlot = activeSession?.status === "open"
+    ? activeSession.currentPlayer?.slot as Slot | undefined
+    : activeSession ? undefined : order.find(slot => !rolls[slot] && (mode === "2v2" || slot === "A1" || slot === "B1"));
+  const finished = activeSession?.status === "completed" || visibleSlots.every(slot => Boolean(rolls[slot]));
+  const scoreA = activeSession?.scores.A ?? visibleSlots.filter(slot => slot.startsWith("A")).reduce((sum, slot) => sum + (rolls[slot]?.[0] ?? 0) + (rolls[slot]?.[1] ?? 0), 0);
+  const scoreB = activeSession?.scores.B ?? visibleSlots.filter(slot => slot.startsWith("B")).reduce((sum, slot) => sum + (rolls[slot]?.[0] ?? 0) + (rolls[slot]?.[1] ?? 0), 0);
+  const winningTeam = finished && activeSession?.status === "completed" ? activeSession.winningTeam : null;
+  const winner = winningTeam ? `ทีม ${winningTeam}` : undefined;
+  const canCreate = directoryUserIds.length === visibleSlots.length && new Set(directoryUserIds).size === visibleSlots.length;
+
   const createMutation = trpc.futureDice.create.useMutation({
     onSuccess: async session => {
-      setSelectedSessionId(session.id);
-      setNotice(`เริ่มเกม #${session.id} แล้ว · รอ ${session.currentPlayer?.name ?? "ผลเกม"}`);
+      setActiveSessionId(session.id);
+      setLatestSession(session);
       await utils.futureDice.list.invalidate();
     },
-    onError: error => setNotice(errorMessage(error)),
+    onError: cause => setError(messageOf(cause)),
   });
   const rollMutation = trpc.futureDice.roll.useMutation({
     onSuccess: async session => {
-      setSelectedSessionId(session.id);
-      setNotice(session.status === "completed" ? "เกมจบแล้ว ตรวจผลและเลือกผลลัพธ์ได้" : `บันทึกผลทอยแล้ว · เทิร์นถัดไป ${session.currentPlayer?.name ?? "—"}`);
+      setActiveSessionId(session.id);
+      setLatestSession(session);
+      setError("");
       await utils.futureDice.list.invalidate();
     },
-    onError: error => setNotice(errorMessage(error)),
+    onError: cause => setError(messageOf(cause)),
   });
-  const chooseOutcomeMutation = trpc.futureDice.chooseOutcome.useMutation({
+  const outcomeMutation = trpc.futureDice.setOutcomeType.useMutation({
     onSuccess: async session => {
-      setNotice(`บันทึกผลลัพธ์ ${session.selectedOutcome} สำหรับทีม ${session.winningTeam} แล้ว`);
+      setLatestSession(session);
       await utils.futureDice.list.invalidate();
     },
-    onError: error => setNotice(errorMessage(error)),
+    onError: cause => setError(messageOf(cause)),
+  });
+  const chooseMutation = trpc.futureDice.chooseOutcome.useMutation({
+    onSuccess: async session => {
+      setLatestSession(session);
+      setSelectedResult(session.selectedOutcome ?? undefined);
+      await utils.futureDice.list.invalidate();
+    },
+    onError: cause => setError(messageOf(cause)),
   });
   const cancelMutation = trpc.futureDice.cancel.useMutation({
-    onSuccess: async session => {
-      setNotice(`ยกเลิกเกม #${session.id} แล้ว`);
-      await utils.futureDice.list.invalidate();
-    },
-    onError: error => setNotice(errorMessage(error)),
+    onSuccess: async () => { await utils.futureDice.list.invalidate(); },
+    onError: cause => setError(messageOf(cause)),
   });
-
-  const sessions = sessionsQuery.data ?? [];
-  const openSession = sessions.find(session => session.status === "open");
-  const selectedSession = sessions.find(session => session.id === selectedSessionId);
-  const session = openSession ?? selectedSession ?? sessions[0];
-  const slots = useMemo(() => slotsForMode(gameMode), [gameMode]);
-  const playerIds = slots.map(slot => Number(selectedPlayers[slot])).filter(id => Number.isInteger(id) && id > 0);
-  const hasDuplicatePlayer = new Set(playerIds).size !== playerIds.length;
-  const canCreate = !openSession && playerIds.length === slots.length && !hasDuplicatePlayer && !createMutation.isPending;
-  const busy = createMutation.isPending || rollMutation.isPending || chooseOutcomeMutation.isPending || cancelMutation.isPending;
+  const isBusy = sessionsQuery.isLoading || sessionsQuery.isError || createMutation.isPending || rollMutation.isPending || outcomeMutation.isPending || chooseMutation.isPending || cancelMutation.isPending;
 
   useEffect(() => {
-    if (openSession) setSelectedSessionId(openSession.id);
-    else if (!selectedSessionId && sessions[0]) setSelectedSessionId(sessions[0].id);
-  }, [openSession?.id, sessions[0]?.id, selectedSessionId]);
+    if (!openSession) return;
+    setActiveSessionId(openSession.id);
+    setLatestSession(openSession);
+    setMode(displayMode(openSession.gameMode));
+    setChoice(displayChoice(openSession.outcomeType));
+    setSelectedResult(openSession.selectedOutcome ?? undefined);
+  }, [openSession?.id]);
 
-  const changeMode = (mode: GameMode) => {
-    setGameMode(mode);
-    setSelectedPlayers({ A1: "", B1: "", A2: "", B2: "" });
-    setNotice("");
+  const roll = async () => {
+    if (!currentSlot || isBusy) return;
+    setError("");
+    try {
+      let session = activeSession;
+      if (!session || session.status !== "open") {
+        if (!canCreate) {
+          setError("ต้องมีผู้เล่นในสารบบให้ครบตามโหมดก่อนเริ่มเกม");
+          return;
+        }
+        session = await createMutation.mutateAsync({ gameMode: apiMode(mode), outcomeType: apiOutcome(choice), directoryUserIds });
+        setActiveSessionId(session.id);
+        setLatestSession(session);
+      }
+      const updated = await rollMutation.mutateAsync({ sessionId: session.id });
+      setActiveSessionId(updated.id);
+      setLatestSession(updated);
+    } catch {
+      // Mutation hooks provide the user-facing error message.
+    }
   };
 
-  const createGame = () => {
-    if (!canCreate) return;
-    setNotice("");
-    createMutation.mutate({ gameMode, outcomeType, directoryUserIds: playerIds });
+  const reset = () => {
+    const session = activeSession;
+    if (session?.status === "open") {
+      setIgnoredOpenSessionId(session.id);
+      cancelMutation.mutate({ sessionId: session.id });
+    }
+    setActiveSessionId(null);
+    setLatestSession(null);
+    setSelectedResult(undefined);
+    setError("");
+  };
+
+  const changeMode = (next: Mode) => {
+    if (next === mode) return;
+    const session = activeSession;
+    if (session?.status === "open") {
+      setIgnoredOpenSessionId(session.id);
+      cancelMutation.mutate({ sessionId: session.id });
+    }
+    setMode(next);
+    setActiveSessionId(null);
+    setLatestSession(null);
+    setSelectedResult(undefined);
+    setError("");
+  };
+
+  const changeChoice = (next: Choice) => {
+    setChoice(next);
+    setError("");
+    if (activeSession && activeSession.status !== "cancelled") {
+      outcomeMutation.mutate({ sessionId: activeSession.id, outcomeType: apiOutcome(next) });
+    }
+  };
+
+  const selectResult = (result: string) => {
+    setSelectedResult(result);
+    if (activeSession?.status === "completed" && activeSession.winningTeam) {
+      chooseMutation.mutate({ sessionId: activeSession.id, selectedOutcome: result });
+    }
   };
 
   return <section className="future-dice-panel" aria-label="Future เกมทอยลูกเต๋า">
-    <div className="future-dice-heading">
-      <div>
-        <p>FUTURE / SERVER-OWNED GAME</p>
-        <h2>เกมทอยลูกเต๋า</h2>
-        <span>ผลสุ่ม ลำดับเทิร์น และประวัติอยู่บน Server · อุปกรณ์ทุกเครื่องอ่านสถานะเดียวกัน</span>
-      </div>
-      <Dices size={28} />
-    </div>
-
-    {sessionsQuery.isLoading ? <div className="future-dice-empty" role="status">กำลังโหลดเกมจาก Server…</div> : sessionsQuery.isError ? <div className="future-dice-error" role="alert"><CircleAlert size={16} /> เชื่อมต่อ Future Dice ไม่ได้ <button type="button" onClick={() => void sessionsQuery.refetch()}><RefreshCw size={14} /> ลองใหม่</button></div> : <>
-      {!openSession && <section className="future-dice-create" aria-labelledby="future-dice-create-title">
-        <div className="future-dice-create-heading"><div><p>NEW SESSION</p><h3 id="future-dice-create-title">เริ่มเกมใหม่</h3></div><Plus size={18} /></div>
-        <div className="future-dice-options">
-          <fieldset><legend>โหมด</legend><div className="future-choice-row">{(["one_vs_one", "two_vs_two"] as const).map(mode => <button type="button" className={gameMode === mode ? "selected" : ""} onClick={() => changeMode(mode)} key={mode}>{modeLabel(mode)}</button>)}</div></fieldset>
-          <fieldset><legend>ผลลัพธ์ที่ให้เลือกหลังเกม</legend><div className="future-choice-row">{(["minutes", "go_no_go"] as const).map(type => <button type="button" className={outcomeType === type ? "selected" : ""} onClick={() => setOutcomeType(type)} key={type}>{type === "minutes" ? "30 / 60" : "ไป / ไม่ไป"}</button>)}</div></fieldset>
-        </div>
-        <div className="future-player-picker">
-          {slots.map(slot => <label key={slot}><span><b>{slot}</b> ทีม {slot.startsWith("A") ? "A" : "B"}</span><select value={selectedPlayers[slot]} onChange={event => { setSelectedPlayers(current => ({ ...current, [slot]: event.target.value })); setNotice(""); }}><option value="">เลือกผู้เล่น</option>{users.map(user => <option key={user.id} value={user.id}>{user.name}{user.group ? ` · ${user.group}` : ""}</option>)}</select></label>)}
-        </div>
-        {hasDuplicatePlayer && <p className="future-dice-validation" role="alert">ผู้เล่นหนึ่งคนเลือกซ้ำในเกมเดียวกันไม่ได้</p>}
-        {!users.length && <p className="future-dice-validation" role="alert">ยังไม่มีรายชื่อผู้ใช้งานในสารบบ จึงเริ่มเกมไม่ได้</p>}
-        <button type="button" className="future-roll-button" onClick={createGame} disabled={!canCreate}><Plus size={18} /> {createMutation.isPending ? "กำลังสร้างเกม…" : "เริ่มเกมบน Server"}</button>
-      </section>}
-
-      {session ? <section className={`future-dice-session is-${session.status}`} aria-live="polite">
-        <div className="future-session-meta"><div><span>GAME #{session.id}</span><b>{session.status === "open" ? "กำลังเล่น" : session.status === "completed" ? "จบเกม" : "ยกเลิก"}</b></div><small>{modeLabel(session.gameMode)} · {session.outcomeType === "minutes" ? "30 / 60" : "ไป / ไม่ไป"} · เริ่ม {formatDate(session.createdAt)}</small></div>
-        <div className="future-dice-board">{session.players.map(player => <div className={`future-dice-player ${session.currentPlayer?.id === player.id ? "active" : ""}`} key={player.id}><div><b>{player.slot}</b><span>{player.name}</span></div><strong>{player.roll ? `${player.roll.dieOne} + ${player.roll.dieTwo}` : "— + —"}</strong><small>{player.roll ? `รวม ${player.roll.total} · ${player.roll.rolledByName}` : session.currentPlayer?.id === player.id ? "ถึงตา" : "รอการทอย"}</small></div>)}</div>
-        <div className="future-score-row"><span>ทีม A <b>{session.scores.A}</b></span><span>ทีม B <b>{session.scores.B}</b></span></div>
-
-        {session.status === "open" && <div className="future-session-actions"><button type="button" className="future-roll-button" onClick={() => rollMutation.mutate({ sessionId: session.id })} disabled={busy}><Dices size={18} /> {rollMutation.isPending ? "กำลังบันทึกผล…" : `ทอย ${session.currentPlayer?.slot ?? ""} · ${session.currentPlayer?.name ?? ""}`}</button><button type="button" className="future-cancel-button" onClick={() => cancelMutation.mutate({ sessionId: session.id })} disabled={busy}><X size={15} /> ยกเลิกเกม</button></div>}
-        {session.status === "completed" && <div className="future-dice-result"><Trophy size={20} /><div>{session.winningTeam ? <><b>ทีม {session.winningTeam} ชนะ</b><span>คะแนน ทีม A {session.scores.A} · ทีม B {session.scores.B}</span></> : <><b>ผลเสมอ</b><span>คะแนน ทีม A และ ทีม B เท่ากัน</span></>}</div>{session.winningTeam && <div className="future-result-actions">{outcomeChoices(session.outcomeType).map(choice => <button type="button" className={session.selectedOutcome === choice ? "selected" : ""} onClick={() => chooseOutcomeMutation.mutate({ sessionId: session.id, selectedOutcome: choice })} disabled={busy} key={choice}>{choice}</button>)}</div>}</div>}
-        {session.status === "cancelled" && <div className="future-dice-cancelled"><RotateCcw size={16} /> เกมนี้ถูกยกเลิกแล้ว สามารถเริ่มเกมใหม่ได้</div>}
-      </section> : <div className="future-dice-empty">ยังไม่มีประวัติเกม</div>}
-
-      {sessions.length > 1 && <div className="future-history"><span>ประวัติล่าสุด</span><div>{sessions.filter(item => item.id !== session?.id).slice(0, 6).map(item => <button type="button" className={selectedSessionId === item.id ? "selected" : ""} onClick={() => setSelectedSessionId(item.id)} key={item.id}>#{item.id} · {item.status === "open" ? "กำลังเล่น" : item.status === "completed" ? "จบเกม" : "ยกเลิก"}</button>)}</div></div>}
-    </>}
-    {notice && <p className="future-dice-notice" role="status">{notice}</p>}
-    <footer className="future-dice-footer"><span>ลำดับทอย: A1 → B1{(session?.gameMode ?? gameMode) === "two_vs_two" ? " → A2 → B2" : ""}</span><button type="button" onClick={() => void sessionsQuery.refetch()} disabled={sessionsQuery.isFetching}><RefreshCw size={14} /> รีเฟรช</button></footer>
+    <div className="future-dice-heading"><div><p>FUTURE / MINI GAME</p><h2>เกมทอยลูกเต๋า</h2><span>เครื่องมือสุ่มผลแบบสั้น ๆ สำหรับใช้ในแอปหลัก</span></div><Dices size={28} /></div>
+    <div className="future-dice-options"><div><span>ผลลัพธ์</span><div className="future-choice-row">{(["30/60", "ไป/ไม่ไป"] as const).map(item => <button type="button" className={choice === item ? "selected" : ""} onClick={() => changeChoice(item)} key={item}>{item}</button>)}</div></div><div><span>โหมด</span><div className="future-choice-row">{(["1v1", "2v2"] as const).map(item => <button type="button" className={mode === item ? "selected" : ""} onClick={() => changeMode(item)} key={item}>{item}</button>)}</div></div></div>
+    <div className="future-dice-board">{visibleSlots.map(slot => <div className={`future-dice-player ${currentSlot === slot ? "active" : ""}`} key={slot}><div><b>{slot}</b><span>{rosterBySlot[slot]}</span></div><strong>{dicePair(rolls[slot])}</strong><small>{rolls[slot] ? "ทอยแล้ว" : currentSlot === slot ? "ถึงตา" : "รอการทอย"}</small></div>)}</div>
+    {finished && winner ? <div className="future-dice-result"><b>{winner} ชนะ</b><span>ทีม A {scoreA} · ทีม B {scoreB}</span><div className="future-result-actions">{(choice === "30/60" ? ["30", "60"] : ["ไป", "ไม่ไป"]).map(item => <button type="button" className={selectedResult === item ? "selected" : ""} onClick={() => selectResult(item)} key={item}>{item}</button>)}</div></div> : <button type="button" className="future-roll-button" onClick={() => void roll()} disabled={!currentSlot || isBusy}><Dices size={18} />{currentSlot ? `ทอย ${currentSlot}` : "รอผล"}</button>}
+    {error && <small role="alert">{error}</small>}
+    <div className="future-dice-footer"><span>ลำดับ 2vs2: A1 → B1 → A2 → B2</span><button type="button" onClick={reset} disabled={isBusy}><RotateCcw size={14} /> เริ่มใหม่</button></div>
   </section>;
 }

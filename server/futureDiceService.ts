@@ -291,6 +291,20 @@ export async function chooseFutureDiceOutcome(input: {
   return updated;
 }
 
+export async function setFutureDiceOutcomeType(input: {
+  sessionId: number;
+  outcomeType: FutureDiceOutcomeType;
+}): Promise<FutureDiceSessionView> {
+  const db = requireDatabase(await getDb());
+  const session = (await db.select().from(futureDiceSessions).where(eq(futureDiceSessions.id, input.sessionId)).limit(1))[0];
+  if (!session || session.status === "cancelled") throw new FutureDiceServiceError("ไม่พบเกมที่กำลังแก้ไข");
+  await db.update(futureDiceSessions).set({ outcomeType: input.outcomeType, selectedOutcome: null })
+    .where(eq(futureDiceSessions.id, input.sessionId));
+  const updated = await getFutureDiceSession(input.sessionId);
+  if (!updated) throw new FutureDiceServiceError("ไม่พบเกมหลังบันทึกรูปแบบผลลัพธ์");
+  return updated;
+}
+
 export async function cancelFutureDiceSession(sessionId: number): Promise<FutureDiceSessionView> {
   const db = requireDatabase(await getDb());
   const update = await db.update(futureDiceSessions).set({ status: "cancelled", completedAt: new Date() })
