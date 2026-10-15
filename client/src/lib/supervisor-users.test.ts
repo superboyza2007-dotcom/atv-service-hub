@@ -20,6 +20,11 @@ describe("supervisor users", () => {
     expect(users).toHaveLength(1);
   });
 
+  it("rejects duplicate names across different user groups", () => {
+    const users = [{ id: 10, name: "สมชาย", code: "G-010", group: "ไกด์" }];
+    expect(addSupervisorUser(users, "  สมชาย  ", "M-011", "ช่าง").error).toContain("ชื่อ");
+  });
+
   it("uses the system directory as manager options", () => {
     const users = [
       { id: 1, name: "ไกด์หนึ่ง", code: "G-001", group: "ไกด์" },
@@ -38,5 +43,6 @@ describe("supervisor users", () => {
     expect(result.error).toBe("");
     expect(result.users[0]).toEqual({ id: 1, name: "ไกด์ใหม่", code: "G-009", group: "หัวหน้า" });
     expect(updateSupervisorUser(users, 1, "ใหม่", "m-002", "ไกด์").error).toContain("มีอยู่แล้ว");
+    expect(updateSupervisorUser(users, 1, "ช่างเดิม", "G-009", "หัวหน้า").error).toContain("ชื่อ");
   });
 });

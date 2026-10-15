@@ -6,6 +6,10 @@ import { directoryCredentialFields, hashDirectoryCode, hashMatches } from './app
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
+function normalizeDirectoryName(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("th-TH");
+}
+
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -119,6 +123,11 @@ export async function setAppDirectoryCodeHash(id: number, codeHash: string, code
 export async function upsertAppDirectoryUser(input: InsertAppDirectoryUser): Promise<AppDirectoryUser> {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
+  const existingUsers = await listAppDirectoryUsers();
+  const normalizedName = normalizeDirectoryName(input.name);
+  if (existingUsers.some(user => user.id !== input.id && normalizeDirectoryName(user.name) === normalizedName)) {
+    throw new Error("ชื่อนี้มีอยู่แล้ว กรุณาใช้ชื่ออื่น");
+  }
   const normalizedCode = input.code?.trim() ?? "";
   if (!normalizedCode) throw new Error("Directory code is required");
   const hashed = hashDirectoryCode(normalizedCode);
@@ -157,6 +166,12 @@ export async function replaceAppDirectoryUsers(inputs: InsertAppDirectoryUser[])
       userGroup: input.userGroup.trim(),
     };
   });
+  const seenNames = new Set<string>();
+  for (const user of normalized) {
+    const nameKey = normalizeDirectoryName(user.name);
+    if (seenNames.has(nameKey)) throw new Error("ชื่อนี้มีอยู่แล้ว กรุณาใช้ชื่ออื่น");
+    seenNames.add(nameKey);
+  }
   const persistedIds = normalized.flatMap(input => input.id != null && Number.isInteger(Number(input.id)) ? [Number(input.id)] : []);
   await db.transaction(async tx => {
     if (persistedIds.length) {
