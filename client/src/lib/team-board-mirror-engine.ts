@@ -301,6 +301,12 @@ export function recordActiveSessions(inputState: QueueState, input: MirrorActive
   return { state: next, eventId, enteredIds, exitedRunIds };
 }
 
+/** Selects only non-source runs for the visible Active Zone when 2.3 is the source of truth. */
+export function selectVisibleActiveRuns(activeRuns: QueueState["active"], hasSourceActiveGroups: boolean): QueueState["active"] {
+  if (!hasSourceActiveGroups) return activeRuns;
+  return activeRuns.filter((run) => !run.sourceSessionId && !run.externalEventId?.startsWith("atv:"));
+}
+
 
 /** Removes only persisted ATV mirror artifacts created by the former synthetic source mirror.
  * Does not award rounds, change roles, or touch manually dispatched Active runs. */
