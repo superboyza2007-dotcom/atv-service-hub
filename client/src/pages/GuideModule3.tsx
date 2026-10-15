@@ -265,10 +265,10 @@ export default function GuideModule3() {
   useEffect(() => {
     if (!isStorageHydrated || !guideStateHydrated.current || !canonicalDirectory.isSuccess) return;
     saveGuideStateMutation.mutate(
-      { key: OPERATIONS_SNAPSHOT_KEYS.guideState, payload: serializeOperationsSnapshot({ vehicles, members, sessions, messages, repairReports, alertReports, repairQueue, payoutRoundValues }) },
-      { onError: () => setNotice("บันทึกค่ารอบเข้าฐานข้อมูลไม่สำเร็จ กรุณาลองใหม่") },
+      { key: OPERATIONS_SNAPSHOT_KEYS.guideState, payload: serializeOperationsSnapshot({ vehicles, members, sessions, messages, repairReports, alertReports, repairQueue }) },
+      { onError: () => setNotice("บันทึกข้อมูลการทำงานเข้าฐานข้อมูลไม่สำเร็จ กรุณาลองใหม่") },
     );
-  }, [isStorageHydrated, canonicalDirectory.isSuccess, vehicles, members, sessions, messages, repairReports, alertReports, repairQueue, payoutRoundValues]);
+  }, [isStorageHydrated, canonicalDirectory.isSuccess, vehicles, members, sessions, messages, repairReports, alertReports, repairQueue]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   // Cross-device session refresh is provided by guideSessionsQuery polling.
   // Safety guidance is hydrated from the Mechanic Warning Tab 2 vehicleFlow Server snapshot.
