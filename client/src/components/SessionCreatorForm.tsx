@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { ArrowLeft, CalendarClock, Check, Plus, Search } from "lucide-react";
+import { ArrowLeft, CalendarClock, Check, ChevronDown, Plus, Search } from "lucide-react";
 import { isSelectableForNewSession, isVehicleOperationallyReadyStatus } from "@/lib/vehicle-selection-rules";
 import { VehicleSafetyNoticeIndicator } from "@/components/VehicleSafetyNotice";
 import type { VehicleSafetyNotice } from "@/lib/vehicle-safety-notices";
@@ -8,6 +8,18 @@ import { memberGroupClass } from "@/lib/member-group-style";
 export type SessionCreatorVehicle = { number: number; cc: "200" | "250"; status: string; group?: string; manager?: string; color?: string };
 export type SessionCreatorMember = { id: string; name: string; role?: string; available?: boolean };
 export type SessionCreatorDraft = { vehicleIds: string[]; memberIds: string[]; activeUserId: string; durationMinutes: number; riderCount: number; passengerCount: number };
+
+function CountPicker({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
+  const [open, setOpen] = useState(false);
+  const options = useMemo(() => Array.from({ length: max - min + 1 }, (_, index) => min + index), [min, max]);
+  return <div className="m3-count-picker">
+    <span>{label}</span>
+    <button type="button" className={`m3-count-picker-trigger ${open ? "open" : ""}`} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(current => !current)}><strong>{value}</strong><ChevronDown size={14} /></button>
+    {open && <div className="m3-count-picker-menu" role="listbox" aria-label={`เลือกจำนวน ${label}`}>
+      {options.map(option => <button type="button" role="option" aria-selected={option === value} className={option === value ? "selected" : ""} key={option} onClick={() => { onChange(option); setOpen(false); }}>{option}</button>)}
+    </div>}
+  </div>;
+}
 
 type Props = { vehicles: SessionCreatorVehicle[]; members: SessionCreatorMember[]; busyVehicleNumbers: Set<number>; busyMemberIds?: Set<string>; creatorName: string; onBack: () => void; onCreate: (draft: SessionCreatorDraft) => void; roleLabel?: string; activeUserId?: string; activeUserName?: string; lockActiveUser?: boolean; safetyNotices?: VehicleSafetyNotice[]; onSafetyNoticeOpen?: (notices: VehicleSafetyNotice[]) => void };
 
@@ -40,7 +52,7 @@ export function SessionCreatorForm({ vehicles, members, busyVehicleNumbers, busy
       <div className="m3-panel-title"><div><p>2.1 / INPUT</p><h2>สร้างรายการใหม่</h2><span>ผู้สร้างห้อง: {creatorName} · หัวหน้าจะเป็นผู้ปฏิบัติงานก็ต่อเมื่อกดเลือกเอง</span></div><CalendarClock size={22} /></div>
       <div className="m3-input-settings-row">
         <div className="m3-field"><label>โปรแกรมเวลา</label><div className="m3-segment"><button type="button" className={durationMinutes === 30 ? "selected" : ""} onClick={() => setDurationMinutes(30)}>30 นาที</button><button type="button" className={durationMinutes === 60 ? "selected" : ""} onClick={() => setDurationMinutes(60)}>60 นาที</button></div></div>
-        <div className="m3-counter-group"><label className="m3-counter-heading">ผู้ใช้บริการ</label><div className="m3-counter-row"><label>R <input type="number" min="0" value={riderCount} onChange={event => setRiderCount(Math.max(0, Number(event.target.value) || 0))} /></label><label>P <input type="number" min="0" value={passengerCount} onChange={event => setPassengerCount(Math.max(0, Number(event.target.value) || 0))} /></label></div></div>
+        <div className="m3-counter-group"><label className="m3-counter-heading">ผู้ใช้บริการ</label><div className="m3-counter-row"><CountPicker label="R" value={riderCount} min={1} max={30} onChange={setRiderCount} /><CountPicker label="P" value={passengerCount} min={0} max={30} onChange={setPassengerCount} /></div></div>
       </div>
       <div className="m3-field"><label>รถพร้อมใช้เท่านั้น</label><div className="m3-input-vehicle-groups">{inputVehicleGroups.length ? inputVehicleGroups.map(group => <section className="m3-input-vehicle-group" key={group.label} style={{ "--input-group-accent": group.color } as React.CSSProperties}><div className="m3-input-vehicle-group-heading"><div><strong>{group.label}</strong><span>เบอร์รถในกลุ่ม · {group.vehicles.length} คัน</span></div><small>{group.vehicles.filter(vehicle => isVehicleOperationallyReadyStatus(vehicle.status)).length} คันว่าง</small></div><div className="m3-input-vehicle-group-numbers">{(["200", "250"] as const).map(cc => { const groupVehicles = group.vehicles.filter(vehicle => vehicle.cc === cc); return groupVehicles.length ? <div className="m3-input-vehicle-cc" key={cc}><div className="m3-input-vehicle-cc-heading"><strong>{cc} ซีซี</strong><span>{groupVehicles.length} เบอร์</span></div><div className="m3-lot-grid">{groupVehicles.sort((left, right) => left.number - right.number).map(vehicle => { const ready = isVehicleOperationallyReadyStatus(vehicle.status); const selected = vehicleNumbers.includes(vehicle.number); const accent = vehicle.color || "#4ee88a"; return <button type="button" key={vehicle.number} disabled={!ready} style={{ borderColor: selected ? "#87919b" : accent, color: accent, boxShadow: `0 0 14px ${accent}33` }} className={`${vehicle.status} ${selected ? "selected m3-selected-vehicle" : ""}`} onClick={() => toggleVehicle(vehicle.number)}><span className="m3-lot-number-wrap"><b>#{vehicle.number}</b><VehicleSafetyNoticeIndicator notices={safetyNotices} vehicleNumber={vehicle.number} accentColor={accent} onOpen={onSafetyNoticeOpen ?? (() => undefined)} inline /></span><small>{vehicle.status === "repair" ? "ซ่อม" : vehicle.status === "pickup" ? "แจ้งรับรถ" : vehicle.status === "active" ? "กำลังใช้งาน" : vehicle.status === "inspection" ? "พร้อมใช้ · มีคำแนะนำ" : safetyNotices.some(notice => notice.vehicleNumber === vehicle.number) ? "พร้อมใช้ · มีคำแนะนำ" : "พร้อมใช้"}</small><em style={{ color: accent }}>{vehicle.group || "ยังไม่มีกลุ่ม"}</em><em>{vehicle.manager || "ยังไม่ระบุผู้ดูแล"}</em></button>; })}</div></div> : null; })}</div></section>) : <p className="m3-empty">ยังไม่มีรถพร้อมใช้ในกลุ่ม</p>}</div></div>
       <div className="m3-field"><label>{roleLabel}</label><div className="m3-search"><Search size={15} /><input value={memberSearch} onChange={event => setMemberSearch(event.target.value)} placeholder="ค้นหาชื่อ" /></div><div className="m3-member-grid">{members.filter(member => member.name.includes(memberSearch)).map(member => { const busy = busyMemberIds.has(member.id) && !memberIds.includes(member.id); return <button type="button" key={member.id} disabled={busy} className={`${memberIds.includes(member.id) ? "selected" : ""} ${busy ? "busy" : ""}`} onClick={() => toggleMember(member.id)}><b className={memberGroupClass(member.role)}>{member.name}</b><small>{busy ? "อยู่ใน Standby หรือ Active" : member.role || "ผู้ปฏิบัติงาน"}</small></button>; })}</div></div>
