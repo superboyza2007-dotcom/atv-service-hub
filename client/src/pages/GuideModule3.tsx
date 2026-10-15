@@ -35,7 +35,7 @@ import { isVehicleOperationallyReadyStatus } from "@/lib/vehicle-selection-rules
 import { completionTimingDetail, formatCompletionDifference, sessionCompletionTiming, type SessionCompletionTiming } from "@/lib/session-completion-timing";
 import { excludeCurrentGuideMember, guideMembersFromCanonicalDirectory } from "@/lib/guide-member-selector";
 import { mergeSharedSessions } from "@/lib/shared-session-sync";
-import { findSessionConflict, findSessionForMember } from "@/lib/session-conflicts";
+import { findSessionConflict, findSessionDraftDuplicates, findSessionForMember } from "@/lib/session-conflicts";
 import {
   getResponsibilityGroupColor,
   reconcileActiveVehicleNumbers,
@@ -577,6 +577,11 @@ export default function GuideModule3() {
     if (!currentIdentity?.special && !operatorMember) { setNotice("บัญชีที่ล็อกอินยังไม่มีสิทธิ์เป็น Guide/Mechanic ในฐานข้อมูลหัวหน้า"); return; }
     const sessionMemberIds = Array.from(new Set([operatorId, ...selectedMemberIds]));
     if (!selectedVehicleIds.length) { setNotice("ต้องเลือกรถพร้อมใช้อย่างน้อย 1 คัน"); return; }
+    const draftDuplicates = findSessionDraftDuplicates({ memberIds: sessionMemberIds, vehicleIds: selectedVehicleIds }, members);
+    if (draftDuplicates.memberNames.length || draftDuplicates.vehicleKeys.length) {
+      setNotice(`รายการนี้มีข้อมูลซ้ำ${draftDuplicates.memberNames.length ? ` ชื่อ ${draftDuplicates.memberNames.join(", ")}` : ""}${draftDuplicates.vehicleKeys.length ? ` รถ #${draftDuplicates.vehicleKeys.join(", #")}` : ""} กรุณาแก้ก่อนบันทึก`);
+      return;
+    }
     const conflict = findSessionConflict(sessions, { memberIds: sessionMemberIds, activeUserName: currentOperatorName, vehicleIds: selectedVehicleIds }, members, editingSessionId);
     if (conflict) {
       const existing = conflict.session as ModuleSession;

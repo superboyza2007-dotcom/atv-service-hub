@@ -11,6 +11,11 @@ export type SessionMemberRecord = {
   name?: unknown;
 };
 
+export type SessionDraftDuplicate = {
+  memberNames: string[];
+  vehicleKeys: string[];
+};
+
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase("th-TH");
 }
@@ -30,6 +35,25 @@ function splitNames(value: unknown): string[] {
     .split(/[·,\/|]/)
     .map(normalizeText)
     .filter(name => name.length > 1);
+}
+
+export function findSessionDraftDuplicates(
+  draft: SessionConflictRecord,
+  members: SessionMemberRecord[] = [],
+): SessionDraftDuplicate {
+  const memberNames = (draft.memberIds ?? [])
+    .map(memberId => members.find(member => normalizeMemberId(member.id) === normalizeMemberId(memberId))?.name)
+    .map(normalizeText)
+    .filter(Boolean);
+  const memberNameCounts = new Map<string, number>();
+  memberNames.forEach(name => memberNameCounts.set(name, (memberNameCounts.get(name) ?? 0) + 1));
+  const vehicleKeys = (draft.vehicleIds ?? []).map(normalizeVehicleId).filter(Boolean);
+  const vehicleCounts = new Map<string, number>();
+  vehicleKeys.forEach(key => vehicleCounts.set(key, (vehicleCounts.get(key) ?? 0) + 1));
+  return {
+    memberNames: Array.from(memberNameCounts.entries()).filter(([, count]) => count > 1).map(([name]) => name),
+    vehicleKeys: Array.from(vehicleCounts.entries()).filter(([, count]) => count > 1).map(([key]) => key),
+  };
 }
 
 export function sessionMemberKeys(session: SessionConflictRecord, members: SessionMemberRecord[] = []): Set<string> {
