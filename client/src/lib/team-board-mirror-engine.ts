@@ -16,6 +16,19 @@ export type MirrorRecordResult = TransitionResult & {
   ignored?: boolean;
 };
 
+export type MirrorActiveSession = {
+  sessionId: string;
+  memberIds: string[];
+  startedAt?: number;
+  durationSeconds: number;
+};
+
+export type MirrorActiveSessionsInput = {
+  eventId: string;
+  sessions: MirrorActiveSession[];
+  now?: number;
+};
+
 const unique = (ids: string[]) => Array.from(new Set(ids));
 
 /** Keeps a user selection aligned with whole Active runs. A multi-member run
@@ -198,6 +211,92 @@ export function recordActive(inputState: QueueState, input: MirrorActiveInput): 
 
   next.mirrorEventIds = [...(next.mirrorEventIds ?? []), eventId].slice(-100);
   next.events.unshift({ at: now, code: "MIRROR_ACTIVE_RECORDED", message: `Mirror Active ${eventId}: เข้า ${enteredIds.length} คน, ออก ${exitedRunIds.length} run ตามรายการที่ผู้ใช้บันทึก`, memberIds: desired });
+  next.events = next.events.slice(0, 100);
+  return { state: next, eventId, enteredIds, exitedRunIds };
+}
+
+/** Keeps each 2.3 Active Session as one run while using the same dispatch rules. */
+export function recordActiveSessions(inputState: QueueState, input: MirrorActiveSessionsInput): MirrorRecordResult {
+  const state = structuredClone(inputState);
+  const now = input.now ?? Date.now();
+  const eventId = input.eventId.trim();
+  if (!eventId) return { state, error: "2.3 Active ต้องมี eventId" };
+  if (state.mirrorEventIds?.includes(eventId)) return { state, eventId, enteredIds: [], exitedRunIds: [], ignored: true };
+
+  const sessions = input.sessions.map(session => ({
+    ...session,
+    sessionId: session.sessionId.trim(),
+    memberIds: unique(session.memberIds),
+    durationSeconds: Math.max(1, Math.floor(session.durationSeconds)),
+  })).filter(session => session.sessionId && session.memberIds.length);
+  const duplicate = sessions.find((session, index) => sessions.findIndex(item => item.sessionId === session.sessionId) !== index);
+  if (duplicate) return { state, error: `2.3 Active มี Session ซ้ำ: ${duplicate.sessionId}` };
+
+  const ownerByMember = new Map<string, string>();
+  for (const session of sessions) {
+    for (const memberId of session.memberIds) {
+      if (!state.members[memberId]) return { state, error: `2.3 Active พบชื่อที่ไม่มีในคิว: ${memberId}` };
+      const owner = ownerByMember.get(memberId);
+      if (owner && owner !== session.sessionId) return { state, error: `สมาชิก ${memberId} อยู่ใน Active มากกว่าหนึ่งรายการ` };
+      ownerByMember.set(memberId, session.sessionId);
+    }
+  }
+
+  let next = state;
+  const desiredIds = new Set(sessions.map(session => session.sessionId));
+  const exitedRunIds: string[] = [];
+  for (const run of next.active.filter(run => run.sourceSessionId && !desiredIds.has(run.sourceSessionId))) {
+    const completed = completeRun(next, run.id, now);
+    if (completed.error) return { state, error: completed.error };
+    next = completed.state;
+    exitedRunIds.push(run.id);
+  }
+
+  const enteredIds: string[] = [];
+  for (const session of sessions) {
+    const existing = next.active.find(run => run.sourceSessionId === session.sessionId);
+    if (existing) {
+      if ([...existing.memberIds].sort().join("|") !== [...session.memberIds].sort().join("|")) {
+        return { state, error: `Session ${session.sessionId} เปลี่ยนสมาชิกระหว่าง Active` };
+      }
+      existing.startedAt = session.startedAt ?? existing.startedAt;
+      existing.durationSeconds = session.durationSeconds;
+      existing.externalEventId = eventId;
+      continue;
+    }
+
+    const conflict = next.active.find(run => run.memberIds.some(memberId => session.memberIds.includes(memberId)));
+    if (conflict) return { state, error: `Session ${session.sessionId} ใช้สมาชิกที่กำลังอยู่ใน ${conflict.id}` };
+
+    const preservedRuns = next.active;
+    const isolatedState = structuredClone(next);
+    isolatedState.active = [];
+    const recorded = recordActive(isolatedState, {
+      eventId: `${eventId}:${session.sessionId}`,
+      activeMemberIds: session.memberIds,
+      now: session.startedAt ?? now,
+      durationSeconds: session.durationSeconds,
+    });
+    if (recorded.error) return { state, error: recorded.error };
+    if (recorded.state.active.length !== 1) return { state, error: `Session ${session.sessionId} จับเป็น Active รายการเดียวไม่ได้` };
+    const created = recorded.state.active[0];
+    created.id = `AR-${session.sessionId}`;
+    created.sourceSessionId = session.sessionId;
+    created.externalEventId = eventId;
+    created.startedAt = session.startedAt ?? created.startedAt;
+    created.durationSeconds = session.durationSeconds;
+    recorded.state.active = [...preservedRuns, created];
+    next = recorded.state;
+    enteredIds.push(...session.memberIds);
+  }
+
+  next.mirrorEventIds = [...(next.mirrorEventIds ?? []), eventId].slice(-100);
+  next.events.unshift({
+    at: now,
+    code: "ACTIVE_23_SYNCED",
+    message: `2.3 Active ${eventId}: ${sessions.length} รายการเข้า Run Queue, คืน ${exitedRunIds.length} รายการ`,
+    memberIds: sessions.flatMap(session => session.memberIds),
+  });
   next.events = next.events.slice(0, 100);
   return { state: next, eventId, enteredIds, exitedRunIds };
 }

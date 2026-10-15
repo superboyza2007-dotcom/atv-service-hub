@@ -30,6 +30,8 @@ export type ActiveRun = {
   durationSeconds?: number;
   /** The canonical Active event that owns this run. External-owned runs do not expire locally. */
   externalEventId?: string;
+  /** The source 2.3 Active Session that owns this run, when applicable. */
+  sourceSessionId?: string;
   compensationEventId?: string;
   splitMemberId?: string;
   returnMemberId?: string;
