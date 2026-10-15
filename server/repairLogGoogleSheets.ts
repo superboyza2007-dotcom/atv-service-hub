@@ -1,13 +1,34 @@
 import { z } from "zod";
 import { ENV } from "./_core/env";
 
+export const REPAIR_LOG_SHEET_COLUMNS = [
+  "รหัสรายการ",
+  "วันที่และเวลา",
+  "วันที่แก้ไข",
+  "เวลาซ่อมรวม",
+  "เบอร์รถ",
+  "รายละเอียด",
+  "อะไหล่เบิกซ่อม",
+  "ชื่อช่างผู้ทำรายการ",
+  "ชั่วโมงสะสม",
+  "สถานะ",
+  "ตัวเลือก",
+  "รหัสแจ้งซ่อมจากไกด์",
+  "ประเภท",
+] as const;
+
 const repairLogCellSchema = z.union([z.string().max(20_000), z.number().finite()]);
+const repairLogColumnsSchema = z.array(z.string()).length(REPAIR_LOG_SHEET_COLUMNS.length).refine(
+  columns => columns.every((column, index) => column === REPAIR_LOG_SHEET_COLUMNS[index]),
+  "RepairLog columns must match the configured 13-column contract",
+);
+const repairLogRowSchema = z.array(repairLogCellSchema).length(REPAIR_LOG_SHEET_COLUMNS.length);
 
 export const repairLogPayloadSchema = z.object({
   source: z.literal("guide-module-dashboard"),
   sheetName: z.literal("RepairLog"),
-  columns: z.array(z.string().trim().min(1).max(128)).min(1).max(20),
-  rows: z.array(z.array(repairLogCellSchema).max(20)).max(1_000),
+  columns: repairLogColumnsSchema,
+  rows: z.array(repairLogRowSchema).min(1).max(1_000),
   sentAt: z.string().datetime(),
 });
 
