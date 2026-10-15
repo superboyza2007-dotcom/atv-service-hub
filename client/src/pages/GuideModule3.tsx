@@ -438,7 +438,7 @@ export default function GuideModule3() {
   const completeSessionMutation = trpc.vehicleFlow.completeSession.useMutation({ onSuccess: refreshVehicleFlow });
   const cancelSessionMutation = trpc.vehicleFlow.cancelSession.useMutation({ onSuccess: refreshVehicleFlow });
   const databaseVehicleId = (vehicleId: string) => {
-    const parsed = Number(vehicleId);
+    const parsed = Number(vehicleId.replace(/^m3-v/, ""));
     return usingPersistentVehicleFlow && Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
   };
   useEffect(() => {
