@@ -9,7 +9,7 @@ export type SessionCreatorVehicle = { number: number; cc: "200" | "250"; status:
 export type SessionCreatorMember = { id: string; name: string; role?: string; available?: boolean };
 export type SessionCreatorDraft = { vehicleIds: string[]; memberIds: string[]; activeUserId: string; durationMinutes: number; riderCount: number; passengerCount: number };
 
-function CountPicker({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
+export function CountPicker({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
   const [open, setOpen] = useState(false);
   const options = useMemo(() => Array.from({ length: max - min + 1 }, (_, index) => min + index), [min, max]);
   return <div className="m3-count-picker">
