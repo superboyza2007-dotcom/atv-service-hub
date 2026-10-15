@@ -11,6 +11,7 @@ type QueueMemberOption = { name: string; group?: string };
 type ActiveSessionNameGroup = { sessionId: string; memberNames: string[]; activeUserName?: string; startedAt?: string; durationMinutes?: number };
 const CUSTOM_NAME_OPTION = "__atv_custom_name__";
 const shifts = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00"];
+const DAILY_SECTION_SLOTS = ["08:00", "10:00", "13:00", "15:00"] as const;
 const durationOptions = [15, 30, 45, 60];
 const initialRows = shifts.slice(0, 3).map((shift, index) => ({ id: `row-${index + 1}`, shift, slot1: "", slot2: "" }));
 const DEFAULT_ACCESS_CODE = "123456";
@@ -536,6 +537,7 @@ function ActiveCard({ run, state, duration, onComplete }: { run: QueueState["act
 
 function QueueDisplayBoard({ operatorName, members, state, onNavigate }: { operatorName: string; members: BoardMember[]; state: QueueState; onNavigate: (screen: "register" | "dashboard" | "queue" | "events") => void }) {
   const [now, setNow] = useState(() => new Date());
+  const [selectedSection, setSelectedSection] = useState<(typeof DAILY_SECTION_SLOTS)[number] | null>(null);
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 1000); return () => window.clearInterval(timer); }, []);
 
   // This screen is a read-only mirror of the canonical Standby queue. Do not
@@ -558,6 +560,15 @@ function QueueDisplayBoard({ operatorName, members, state, onNavigate }: { opera
     pair: group.slice(rowIndex * 2, rowIndex * 2 + 2),
   })));
   const names = (items: BoardMember[], showActive = false) => items.map((member) => <span key={member.id}>{member.name}{showActive && activeIds.has(member.id) ? " · กำลังทำงาน" : ""}</span>);
+  const sectionForEvent = (at: number) => {
+    const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", hourCycle: "h23" }).format(new Date(at)));
+    return hour < 10 ? "08:00" : hour < 13 ? "10:00" : hour < 15 ? "13:00" : "15:00";
+  };
+  const bangkokDay = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  const todayKey = bangkokDay(now);
+  const eventsForToday = state.events.filter((event) => bangkokDay(new Date(event.at)) === todayKey);
+  const sectionEvents = selectedSection ? eventsForToday.filter((event) => sectionForEvent(event.at) === selectedSection) : [];
+  const sectionMembers = (event: QueueEvent) => (event.memberIds ?? []).map((id) => state.members[id]?.name).filter((name): name is string => Boolean(name));
   return (
     <div className="queue-display-app">
       <header className="queue-display-topbar">
@@ -579,7 +590,7 @@ function QueueDisplayBoard({ operatorName, members, state, onNavigate }: { opera
             </div>
             <div className="queue-display-times">
               <div>วันที่ {now.toLocaleDateString("th-TH", { day: "numeric", month: "numeric", year: "2-digit" })}</div>
-              <div>08:00</div><div>10:00</div><div>13:00</div><div>15:00</div>
+              {DAILY_SECTION_SLOTS.map((slot) => <button type="button" className="queue-display-slot-button" key={slot} onClick={() => setSelectedSection(slot)} aria-label={`เปิดบันทึกชั่วคราว Section ${slot}`}><strong>{slot}</strong><small>{eventsForToday.filter((event) => sectionForEvent(event.at) === slot).length} รายการ</small></button>)}
             </div>
             <div className="queue-display-body">
               <div className="queue-display-left">
@@ -598,11 +609,12 @@ function QueueDisplayBoard({ operatorName, members, state, onNavigate }: { opera
                 <div className="queue-display-status-row"><div>QL{names(ql)}</div><div>QF{names(qf)}</div></div>
                 <div className="queue-display-status-row queue-display-colored"><div className="queue-display-dp">Dp{names(dp)}</div><div className="queue-display-floating">^ <span>ตัวลอย{names(floating, true)}</span></div></div>
               </div>
-              <div className="queue-display-empty" /><div className="queue-display-empty" /><div className="queue-display-empty" /><div className="queue-display-empty" />
+              {DAILY_SECTION_SLOTS.map((slot) => <button type="button" className="queue-display-empty queue-display-section-button" key={slot} onClick={() => setSelectedSection(slot)} aria-label={`เปิดบันทึกชั่วคราว Section ${slot}`}><span>เปิดบันทึก Section</span><small>{eventsForToday.filter((event) => sectionForEvent(event.at) === slot).length} รายการที่ผ่านมา</small></button>)}
             </div>
             <div className="queue-display-footer">แสดงจาก 02 / CARD คิว Standby หลัก · ลำดับทีมและตำแหน่ง Te / Dp / Wk</div>
           </div>
         </section>
+        {selectedSection && <div className="queue-display-history-backdrop" role="presentation" onClick={() => setSelectedSection(null)}><section className="queue-display-history" role="dialog" aria-modal="true" aria-labelledby="queue-display-history-title" onClick={(event) => event.stopPropagation()}><div className="queue-display-history-head"><div><small>บันทึกชั่วคราวตาม Section</small><h2 id="queue-display-history-title">ห้วงเวลา {selectedSection}</h2><span>รายการที่เคยกดทำใน Section นี้</span></div><button type="button" onClick={() => setSelectedSection(null)} aria-label="ปิดประวัติ Section"><X size={18} /></button></div>{sectionEvents.length ? <div className="queue-display-history-list">{sectionEvents.slice().sort((left, right) => right.at - left.at).map((event, index) => <article key={`${event.at}-${event.code}-${index}`}><div><strong>{new Date(event.at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</strong><span>{event.code}</span></div><p>{event.message}</p>{sectionMembers(event).length > 0 && <small>รายชื่อ: {sectionMembers(event).join(" · ")}</small>}</article>)}</div> : <div className="queue-display-history-empty"><Clock3 size={20} /><strong>ยังไม่มีรายการในห้วงเวลานี้</strong><span>เมื่อมีการกดทำรายการ ระบบจะเก็บไว้แสดงตรงนี้</span></div>}</section></div>}
       </main>
     </div>
   );
