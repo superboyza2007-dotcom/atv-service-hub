@@ -23,6 +23,7 @@ import {
 } from "./vehicleFlowService";
 import { completeNextActiveQueue, reconcileActiveQueue } from "./activeQueueMirror";
 import { isRepairLogSheetConfigured, repairLogPayloadSchema, submitRepairLogSheetPayload } from "./repairLogGoogleSheets";
+import { cancelFutureDiceSession, chooseFutureDiceOutcome, createFutureDiceSession, isFutureDiceRuleError, listFutureDiceSessions, rollFutureDice, type FutureDiceActor } from "./futureDiceService";
 
 const vehicleActor = (user: { id: number; role: "user" | "guide" | "mechanic" | "supervisor" | "admin" }) => ({
   id: user.id,
@@ -46,6 +47,46 @@ function actorFromContext(ctx: TrpcContext) {
     return vehicleActor({ id: ctx.appUser.id, role });
   }
   throw new TRPCError({ code: "UNAUTHORIZED", message: "App session required" });
+}
+
+function futureDiceActorFromContext(ctx: TrpcContext): FutureDiceActor {
+  const group = ctx.appUser?.userGroup ?? "";
+  const isSupervisor = ctx.appSpecialAccess || ctx.user?.role === "admin" || ctx.user?.role === "supervisor" || group.includes("หัวหน้า");
+  return {
+    directoryUserId: ctx.appUser?.id,
+    name: ctx.appUser?.name ?? ctx.user?.name ?? "ผู้ควบคุมเกม",
+    isSupervisor,
+  };
+}
+
+function futureDiceMessageModule(ctx: TrpcContext): "guide" | "mechanic" | "supervisor" {
+  const group = ctx.appUser?.userGroup ?? "";
+  if (ctx.appSpecialAccess || ctx.user?.role === "admin" || ctx.user?.role === "supervisor" || group.includes("หัวหน้า")) return "supervisor";
+  if (group.includes("ช่าง")) return "mechanic";
+  return "guide";
+}
+
+async function announceFutureDice(ctx: TrpcContext, body: string) {
+  try {
+    await appendLiveMessage({
+      channelType: "room",
+      channelId: "future-dice",
+      senderDirectoryUserId: ctx.appUser?.id,
+      senderModule: futureDiceMessageModule(ctx),
+      senderName: ctx.appUser?.name ?? ctx.user?.name ?? "ระบบ Future Dice",
+      body,
+    });
+  } catch (error) {
+    // A committed game transition remains valid even when an auxiliary announcement is unavailable.
+    console.warn("[FutureDice] Could not append live announcement", error);
+  }
+}
+
+function throwFutureDiceError(error: unknown): never {
+  if (isFutureDiceRuleError(error)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+  }
+  throw error;
 }
 
 export const appRouter = router({
@@ -100,6 +141,69 @@ export const appRouter = router({
       } catch (error) {
         console.error("[RepairLog] Server-side Google Sheets submission failed");
         throw new TRPCError({ code: "BAD_GATEWAY", message: "Google Sheets could not confirm the repair-log export" });
+      }
+    }),
+  }),
+  futureDice: router({
+    list: appProtectedProcedure.input(z.object({ limit: z.number().int().min(1).max(30).optional() }).optional()).query(async ({ input }) => {
+      try {
+        return await listFutureDiceSessions(input?.limit ?? 12);
+      } catch (error) {
+        return throwFutureDiceError(error);
+      }
+    }),
+    create: appProtectedProcedure.input(z.object({
+      gameMode: z.enum(["one_vs_one", "two_vs_two"]),
+      outcomeType: z.enum(["minutes", "go_no_go"]),
+      directoryUserIds: z.array(z.number().int().positive()).min(2).max(4),
+    })).mutation(async ({ ctx, input }) => {
+      const actor = futureDiceActorFromContext(ctx);
+      if (!actor.isSupervisor) throw new TRPCError({ code: "FORBIDDEN", message: "เฉพาะหัวหน้าหรือสิทธิ์พิเศษเท่านั้นที่เริ่มเกมได้" });
+      try {
+        const session = await createFutureDiceSession({ actor, ...input });
+        await announceFutureDice(ctx, `เริ่มเกม Future Dice #${session.id} · ${session.gameMode === "one_vs_one" ? "1v1" : "2v2"}`);
+        return session;
+      } catch (error) {
+        return throwFutureDiceError(error);
+      }
+    }),
+    roll: appProtectedProcedure.input(z.object({ sessionId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const actor = futureDiceActorFromContext(ctx);
+      try {
+        const session = await rollFutureDice({ sessionId: input.sessionId, actor });
+        const lastRoll = session.players.flatMap(player => player.roll ? [{ player, roll: player.roll }] : []).sort((a, b) => b.player.turnOrder - a.player.turnOrder)[0];
+        await announceFutureDice(ctx, lastRoll ? `Future Dice #${session.id} · ${lastRoll.player.slot} ${lastRoll.player.name} ทอยได้ ${lastRoll.roll.dieOne} + ${lastRoll.roll.dieTwo}` : `Future Dice #${session.id} บันทึกผลทอยแล้ว`);
+        if (session.status === "completed") {
+          await announceFutureDice(ctx, session.winningTeam ? `Future Dice #${session.id} จบเกม · ทีม ${session.winningTeam} ชนะ ${session.scores.A}:${session.scores.B}` : `Future Dice #${session.id} จบเกมเสมอ ${session.scores.A}:${session.scores.B}`);
+        }
+        return session;
+      } catch (error) {
+        return throwFutureDiceError(error);
+      }
+    }),
+    chooseOutcome: appProtectedProcedure.input(z.object({
+      sessionId: z.number().int().positive(),
+      selectedOutcome: z.string().trim().min(1).max(16),
+    })).mutation(async ({ ctx, input }) => {
+      const actor = futureDiceActorFromContext(ctx);
+      if (!actor.isSupervisor) throw new TRPCError({ code: "FORBIDDEN", message: "เฉพาะหัวหน้าหรือสิทธิ์พิเศษเท่านั้นที่เลือกผลลัพธ์ได้" });
+      try {
+        const session = await chooseFutureDiceOutcome(input);
+        await announceFutureDice(ctx, `Future Dice #${session.id} · ทีม ${session.winningTeam} เลือกผลลัพธ์ ${session.selectedOutcome}`);
+        return session;
+      } catch (error) {
+        return throwFutureDiceError(error);
+      }
+    }),
+    cancel: appProtectedProcedure.input(z.object({ sessionId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const actor = futureDiceActorFromContext(ctx);
+      if (!actor.isSupervisor) throw new TRPCError({ code: "FORBIDDEN", message: "เฉพาะหัวหน้าหรือสิทธิ์พิเศษเท่านั้นที่ยกเลิกเกมได้" });
+      try {
+        const session = await cancelFutureDiceSession(input.sessionId);
+        await announceFutureDice(ctx, `Future Dice #${session.id} ถูกยกเลิกโดย ${actor.name}`);
+        return session;
+      } catch (error) {
+        return throwFutureDiceError(error);
       }
     }),
   }),
