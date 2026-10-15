@@ -10,13 +10,9 @@ export function selectStandbyCardItems(state: QueueState): BoardMember[] {
     .filter((member): member is BoardMember => Boolean(member) && (member.isShadow || (member.role !== "floating" && !activeIds.has(member.id))));
 }
 
-/** Keep the 02 / CARD grouping rule: group by team identity in first-seen order. */
+/** Keep the exact Standby order: only pair teammates already adjacent in the queue. */
 export function groupStandbyCardItems(items: BoardMember[]): BoardMember[][] {
-  return Object.values(items.reduce<Record<string, BoardMember[]>>((groups, member) => {
-    const key = member.teamId ?? `individual-${member.id}`;
-    (groups[key] ??= []).push(member);
-    return groups;
-  }, {}));
+  return groupStandbyByAdjacentTeam(items);
 }
 
 /** Pair only adjacent teammates; never pull a returning member ahead of the live queue. */
