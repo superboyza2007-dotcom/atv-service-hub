@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createQueueState, type BoardMember } from "./team-board-queue-engine";
-import { groupStandbyCardItems, selectStandbyCardItems } from "./team-board-queue-view";
+import { groupStandbyByAdjacentTeam, groupStandbyCardItems, selectStandbyCardItems } from "./team-board-queue-view";
 
 const member = (id: string, teamId: string, boardOrder: number): BoardMember => ({
   id,
@@ -13,14 +13,14 @@ const member = (id: string, teamId: string, boardOrder: number): BoardMember => 
 });
 
 describe("Team Board queue view", () => {
-  it("does not pull a returned teammate forward across another queue position in 02 / CARD", () => {
+  it("does not pull a returned teammate forward to their partner's earlier queue position", () => {
     const standby = [
       member("partner", "team-a", 1),
       member("next", "team-b", 2),
       member("returned", "team-a", 3),
     ];
 
-    const groups = groupStandbyCardItems(standby);
+    const groups = groupStandbyByAdjacentTeam(standby);
 
     expect(groups.map(group => group.map(item => item.id))).toEqual([
       ["partner"],
@@ -30,7 +30,7 @@ describe("Team Board queue view", () => {
     expect(groups.flat().map(item => item.id)).toEqual(["partner", "next", "returned"]);
   });
 
-  it("keeps all 02 / CARD Standby positions while pairing only adjacent teammates", () => {
+  it("projects the same Standby members and team pairings as 02 / CARD", () => {
     const dp = { ...member("dp", "team-dp", 4), role: "dp" as const };
     const wk = { ...member("wk", "team-wk", 5), role: "wk" as const };
     const floating = { ...member("floating", "team-floating", 6), role: "floating" as const };
@@ -50,9 +50,8 @@ describe("Team Board queue view", () => {
 
     expect(items.map(item => item.id)).toEqual(["a1", "b1", "a2", "dp", "wk", "shadow"]);
     expect(groupStandbyCardItems(items).map(group => group.map(item => item.id))).toEqual([
-      ["a1"],
+      ["a1", "a2"],
       ["b1"],
-      ["a2"],
       ["dp"],
       ["wk"],
       ["shadow"],
