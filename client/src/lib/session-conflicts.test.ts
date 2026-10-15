@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findSessionConflict, findSessionForMember, isOpenSession, sessionMemberKeys, sessionVehicleKeys } from "./session-conflicts";
+import { findSessionConflict, findSessionDraftDuplicates, findSessionForMember, isOpenSession, sessionMemberKeys, sessionVehicleKeys } from "./session-conflicts";
 
 const members = [
   { id: "7", name: "บอย" },
@@ -37,5 +37,12 @@ describe("session conflicts", () => {
   it("normalizes legacy session identifiers into stable collision keys", () => {
     expect(sessionVehicleKeys({ vehicleIds: ["m3-v61", "vehicle-62", "63"] })).toEqual(new Set(["vehicle:61", "vehicle:62", "vehicle:63"]));
     expect(sessionMemberKeys(active, members)).toEqual(new Set(["id:7", "name:บอย", "id:8", "name:ตี่"]));
+  });
+
+  it("detects duplicate display names and vehicle numbers inside one draft", () => {
+    expect(findSessionDraftDuplicates({ memberIds: ["7", "7", "8"], vehicleIds: ["m3-v61", "61"] }, members)).toEqual({
+      memberNames: ["บอย"],
+      vehicleKeys: ["61"],
+    });
   });
 });
