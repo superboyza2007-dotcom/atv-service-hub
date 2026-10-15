@@ -7036,6 +7036,94 @@ button:active {
 .m3-primary {
   width: 100%;
 }
+.m3-duration-modal-backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(4, 10, 7, 0.72);
+}
+.m3-duration-modal {
+  width: min(100%, 430px);
+  padding: 22px;
+  border: 1px solid rgba(129, 229, 151, 0.45);
+  border-radius: 16px;
+  background: #14231a;
+  color: #f0fff2;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.5);
+}
+.m3-duration-modal-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.m3-duration-modal-heading p {
+  margin: 0 0 5px;
+  color: #81e597;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.m3-duration-modal-heading h2 {
+  margin: 0 0 5px;
+  font-size: 22px;
+}
+.m3-duration-modal-heading span {
+  color: #bcd0c0;
+  font-size: 12px;
+}
+.m3-duration-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.m3-duration-options button {
+  min-height: 112px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 2px;
+  border: 1px solid rgba(165, 203, 175, 0.3);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #d8eadb;
+}
+.m3-duration-options button:hover,
+.m3-duration-options button.selected {
+  border-color: #81e597;
+  background: rgba(129, 229, 151, 0.18);
+  color: #fff;
+}
+.m3-duration-options strong {
+  font-size: 36px;
+  line-height: 1;
+}
+.m3-duration-options span {
+  font-size: 13px;
+  font-weight: 800;
+}
+.m3-duration-modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.m3-duration-modal-actions .m3-primary,
+.m3-duration-modal-actions .m3-secondary {
+  min-height: 42px;
+  width: 100%;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.m3-duration-modal-actions .m3-secondary {
+  border: 1px solid rgba(165, 203, 175, 0.3);
+  background: transparent;
+  color: #d8eadb;
+}
 .m3-notice {
   margin: 8px 0 0;
   color: #9ce9a9;
