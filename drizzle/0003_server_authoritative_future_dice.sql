@@ -43,7 +43,7 @@ CREATE TABLE `futureDiceRolls` (
   CONSTRAINT `futureDiceRolls_session_turn_unique` UNIQUE(`sessionId`,`turnOrder`)
 );
 --> statement-breakpoint
-ALTER TABLE `futureDiceSessions` ADD CONSTRAINT `futureDiceSessions_createdByDirectoryUserId_appDirectoryUsers_id_fk` FOREIGN KEY (`createdByDirectoryUserId`) REFERENCES `appDirectoryUsers`(`id`) ON DELETE set null ON UPDATE no action;
+ALTER TABLE `futureDiceSessions` ADD CONSTRAINT `futureDiceSessions_creator_directory_fk` FOREIGN KEY (`createdByDirectoryUserId`) REFERENCES `appDirectoryUsers`(`id`) ON DELETE set null ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE `futureDicePlayers` ADD CONSTRAINT `futureDicePlayers_sessionId_futureDiceSessions_id_fk` FOREIGN KEY (`sessionId`) REFERENCES `futureDiceSessions`(`id`) ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
@@ -53,7 +53,7 @@ ALTER TABLE `futureDiceRolls` ADD CONSTRAINT `futureDiceRolls_sessionId_futureDi
 --> statement-breakpoint
 ALTER TABLE `futureDiceRolls` ADD CONSTRAINT `futureDiceRolls_playerId_futureDicePlayers_id_fk` FOREIGN KEY (`playerId`) REFERENCES `futureDicePlayers`(`id`) ON DELETE restrict ON UPDATE no action;
 --> statement-breakpoint
-ALTER TABLE `futureDiceRolls` ADD CONSTRAINT `futureDiceRolls_rolledByDirectoryUserId_appDirectoryUsers_id_fk` FOREIGN KEY (`rolledByDirectoryUserId`) REFERENCES `appDirectoryUsers`(`id`) ON DELETE set null ON UPDATE no action;
+ALTER TABLE `futureDiceRolls` ADD CONSTRAINT `futureDiceRolls_roller_directory_fk` FOREIGN KEY (`rolledByDirectoryUserId`) REFERENCES `appDirectoryUsers`(`id`) ON DELETE set null ON UPDATE no action;
 --> statement-breakpoint
 CREATE INDEX `futureDiceSessions_status_updated_lookup` ON `futureDiceSessions` (`futureDiceSessionStatus`,`updatedAt`);
 --> statement-breakpoint

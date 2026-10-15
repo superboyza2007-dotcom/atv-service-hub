@@ -158,13 +158,18 @@ export const futureDiceSessions = mysqlTable("futureDiceSessions", {
   currentTurn: int("currentTurn").default(0).notNull(),
   winningTeam: mysqlEnum("futureDiceWinningTeam", ["A", "B"]),
   selectedOutcome: varchar("selectedOutcome", { length: 16 }),
-  createdByDirectoryUserId: int("createdByDirectoryUserId").references(() => appDirectoryUsers.id, { onDelete: "set null" }),
+  createdByDirectoryUserId: int("createdByDirectoryUserId"),
   createdByName: varchar("createdByName", { length: 128 }).notNull(),
   completedAt: timestamp("completedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => ({
   statusUpdatedLookup: index("futureDiceSessions_status_updated_lookup").on(table.status, table.updatedAt),
+  creatorDirectoryUser: foreignKey({
+    name: "futureDiceSessions_creator_directory_fk",
+    columns: [table.createdByDirectoryUserId],
+    foreignColumns: [appDirectoryUsers.id],
+  }).onDelete("set null"),
 }));
 
 /** Player roster is copied from the directory so historical games remain readable after a directory edit. */
@@ -192,12 +197,17 @@ export const futureDiceRolls = mysqlTable("futureDiceRolls", {
   dieOne: int("dieOne").notNull(),
   dieTwo: int("dieTwo").notNull(),
   total: int("total").notNull(),
-  rolledByDirectoryUserId: int("rolledByDirectoryUserId").references(() => appDirectoryUsers.id, { onDelete: "set null" }),
+  rolledByDirectoryUserId: int("rolledByDirectoryUserId"),
   rolledByName: varchar("rolledByName", { length: 128 }).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, table => ({
   sessionTurnUnique: uniqueIndex("futureDiceRolls_session_turn_unique").on(table.sessionId, table.turnOrder),
   sessionTimeLookup: index("futureDiceRolls_session_time_lookup").on(table.sessionId, table.createdAt),
+  rollerDirectoryUser: foreignKey({
+    name: "futureDiceRolls_roller_directory_fk",
+    columns: [table.rolledByDirectoryUserId],
+    foreignColumns: [appDirectoryUsers.id],
+  }).onDelete("set null"),
 }));
 
 /** Shared app state for code-based modules that do not use Manus OAuth identity. */
