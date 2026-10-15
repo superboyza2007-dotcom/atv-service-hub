@@ -2,20 +2,43 @@ import { describe, expect, it, vi } from "vitest";
 import {
   isRepairLogSheetConfigured,
   parseAllowedAppsScriptUrl,
+  repairLogPayloadSchema,
   submitRepairLogSheetPayload,
   type RepairLogPayload,
 } from "./repairLogGoogleSheets";
 
 const endpoint = "https://script.google.com/macros/s/test-deployment/exec";
+const columns = [
+  "รหัสรายการ",
+  "วันที่และเวลา",
+  "วันที่แก้ไข",
+  "เวลาซ่อมรวม",
+  "เบอร์รถ",
+  "รายละเอียด",
+  "อะไหล่เบิกซ่อม",
+  "ชื่อช่างผู้ทำรายการ",
+  "ชั่วโมงสะสม",
+  "สถานะ",
+  "ตัวเลือก",
+  "รหัสแจ้งซ่อมจากไกด์",
+  "ประเภท",
+];
 const payload: RepairLogPayload = {
   source: "guide-module-dashboard",
   sheetName: "RepairLog",
-  columns: ["รายการ"],
-  rows: [["repair-1"]],
+  columns,
+  rows: [["repair-1", "2026-09-28T00:00:00.000Z", "", "", 12, "รายละเอียด", "", "ช่าง", 1.5, "ซ่อมเสร็จ", "", "guide-1", "รายการซ่อม"]],
   sentAt: "2026-09-28T00:00:00.000Z",
 };
 
 describe("server-side Google Apps Script repair-log proxy", () => {
+  it("requires the exact RepairLog 13-column contract", () => {
+    expect(repairLogPayloadSchema.safeParse(payload).success).toBe(true);
+    expect(repairLogPayloadSchema.safeParse({ ...payload, columns: ["รายการ"] }).success).toBe(false);
+    expect(repairLogPayloadSchema.safeParse({ ...payload, rows: [["repair-1"]] }).success).toBe(false);
+    expect(repairLogPayloadSchema.safeParse({ ...payload, rows: [] }).success).toBe(false);
+  });
+
   it("accepts only HTTPS Apps Script web-app endpoints", () => {
     expect(parseAllowedAppsScriptUrl(endpoint)?.hostname).toBe("script.google.com");
     expect(parseAllowedAppsScriptUrl(`${endpoint}?channel=repair`)).not.toBeNull();
