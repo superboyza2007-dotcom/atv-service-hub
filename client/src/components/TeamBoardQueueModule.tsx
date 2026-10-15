@@ -95,7 +95,7 @@ function buildBoard(rows: RegistrationRow[], accessCode: string): BoardMember[] 
 
 function sortedMembers(state: QueueState) { return Object.values(state.members).sort((a, b) => a.boardOrder - b.boardOrder); }
 
-function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId = "atv-active", rosterNames = [], memberOptions = [], operatorName = "ผู้ใช้งานปัจจุบัน", readOnly = false }: { activeNames?: string[]; activeGroups?: ActiveSessionNameGroup[]; activeEventId?: string; rosterNames?: string[]; memberOptions?: QueueMemberOption[]; operatorName?: string; readOnly?: boolean }) {
+function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId = "atv-active", rosterNames = [], standbyNames, memberOptions = [], operatorName = "ผู้ใช้งานปัจจุบัน", readOnly = false }: { activeNames?: string[]; activeGroups?: ActiveSessionNameGroup[]; activeEventId?: string; rosterNames?: string[]; standbyNames?: string[]; memberOptions?: QueueMemberOption[]; operatorName?: string; readOnly?: boolean }) {
   const [screen, setScreen] = useState<"register" | "dashboard" | "queue" | "events">("register");
   const [rows, setRows] = useState<RegistrationRow[]>(initialRows);
   const [engineState, setEngineState] = useState<QueueState | null>(null);
@@ -173,6 +173,20 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
     }
     seededRosterRef.current = rosterKey;
   }, [rosterKey, rosterNames, secretCode, sharedQueueQuery.isSuccess]);
+  useEffect(() => {
+    if (standbyNames === undefined || !sharedQueueHydrated.current || readOnly || !engineRef.current) return;
+    if (!rosterNames.length && !standbyNames.length) return;
+    const normalized = new Map(Object.values(engineRef.current.members).map((member) => [member.name.trim().toLocaleLowerCase("th-TH"), member.id]));
+    const desiredIds = Array.from(new Set(standbyNames.map((name) => normalized.get(name.trim().toLocaleLowerCase("th-TH"))).filter((id): id is string => Boolean(id))));
+    if (standbyNames.some((name) => name.trim()) && desiredIds.length === 0) return;
+    const activeIds = new Set(engineRef.current.active.flatMap((run) => run.memberIds));
+    const nextStandby = desiredIds.filter((id) => !activeIds.has(id));
+    const currentStandby = engineRef.current.standby.filter((id) => !activeIds.has(id));
+    if (nextStandby.join("|") === currentStandby.join("|")) return;
+    const next = { ...engineRef.current, standby: nextStandby };
+    engineRef.current = next;
+    setEngineState(next);
+  }, [readOnly, rosterNames.length, sharedQueueQuery.isSuccess, standbyNames]);
   useEffect(() => {
     const timer = window.setInterval(() => {
       const state = engineRef.current;
@@ -601,6 +615,6 @@ function QueueBoard({ members, state, onNavigate }: { members: BoardMember[]; st
     .filter((member): member is BoardMember => Boolean(member));
   return <div className="app-shell"><aside className="sidebar"><div className="brand"><div className="brand-mark" aria-label="queue slot mark"><span>[[</span><i /><span>]]</span></div><div><strong>team board</strong><span>standby queue board</span></div></div><div className="sidebar-kicker">STEP 02 / QUEUE BOARD</div><nav className="nav-list"><button className="nav-item" onClick={() => onNavigate("dashboard")}><Activity size={17} />Dashboard<span className="nav-count">05</span></button><button className="nav-item active" onClick={() => onNavigate("queue")}><ListFilter size={17} />คิวตั้งต้น<span className="nav-count">{standby.length}</span></button><button className="nav-item" onClick={() => onNavigate("register")}><UsersRound size={17} />แก้คิวตั้งต้น<span className="nav-count">{members.length}</span></button><button className="nav-item" onClick={() => onNavigate("events")}><Clock3 size={17} />Event log<span className="nav-count">{state.events.length}</span></button></nav><div className="sidebar-bottom"><div className="system-status"><span className="pulse-dot" />Queue board live<span>engine v1</span></div><div className="side-note"><LockKeyhole size={15} />ลำดับปัจจุบันจาก engine</div></div></aside><main className="main-canvas queue-page"><header className="topbar"><div><div className="eyebrow"><span className="live-dot" />STANDBY QUEUE BOARD</div><h1>คิวตั้งต้นปัจจุบัน</h1><p>แสดงผลสะท้อนจากคิว Standby หลักตามลำดับจริง โดยไม่จัดกลุ่มหรือเรียงสมาชิกใหม่</p></div><div className="header-actions"><button className="clear-button" onClick={() => onNavigate("dashboard")}>กลับ Dashboard</button></div></header><section className="panel queue-board-panel"><div className="panel-heading"><div><div className="section-index">01 / CURRENT STANDBY ORDER</div><h2>ลำดับคิวที่กำลังรอ</h2><span className="card-subtitle">คิวหลัก {standby.length} รายการ · แสดงตามลำดับจริง</span></div><span className="count-chip">{standby.length} คน</span></div>{standby.length === 0 ? <div className="card-empty">ไม่มีสมาชิกใน Standby</div> : <div className="queue-board-list">{standby.map((member, index) => <div className="queue-team-row is-individual" key={member.id}><span className="queue-rank">{String(index + 1).padStart(2, "0")}</span><div className="queue-team-content"><div className="team-group-label"><span>{`STANDBY ${String(index + 1).padStart(2, "0")}`}</span><b>{member.isShadow ? "แสดงผลเท่านั้น" : roleLabel[member.role]}</b><em>{member.isShadow ? "ไม่เข้าร่วมการคำนวณ" : "รายการจากคิวหลัก"}</em></div><div className="horizontal-team-members"><div className="horizontal-member"><TeamAvatar member={member} /><div className="member-copy"><strong className={member.isShadow ? "shadow-name" : ""}>{member.name}</strong><span>{member.shift} · {member.rounds} รอบ</span></div><span className={`state-tag ${member.isShadow ? "state-shadow" : member.role === "dp" ? "state-dp" : member.role === "floating" ? "state-floating" : "state-active"}`}>{member.isShadow ? "ผู้ใช้เงา" : roleLabel[member.role]}</span></div></div></div></div>)}</div>}</section></main></div>;
 }
-export default function TeamBoardQueueModule(props: { activeNames?: string[]; activeGroups?: ActiveSessionNameGroup[]; activeEventId?: string; rosterNames?: string[]; memberOptions?: QueueMemberOption[]; operatorName?: string; readOnly?: boolean }) {
+export default function TeamBoardQueueModule(props: { activeNames?: string[]; activeGroups?: ActiveSessionNameGroup[]; activeEventId?: string; rosterNames?: string[]; standbyNames?: string[]; memberOptions?: QueueMemberOption[]; operatorName?: string; readOnly?: boolean }) {
   return <div className="team-board-queue-scope"><TeamBoardQueueContent {...props} /></div>;
 }
