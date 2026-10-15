@@ -3,7 +3,6 @@ import { Activity, AlertTriangle, ArrowLeft, BarChart3, CalendarDays, Check, Clo
 import { ActiveVehicleDetailList } from "@/components/ActiveVehicleDetailList";
 import { VehicleChoiceList, VehicleReplacementPanel, type VehicleChoiceItem } from "@/components/VehicleChoiceList";
 import { VehicleSafetyNoticeDialog, VehicleSafetyNoticeIndicator, VehicleSafetyNoticeList } from "@/components/VehicleSafetyNotice";
-import { activeSessionEventId } from "@/lib/active-session-event";
 import { ActiveSessionChat, type ActiveSessionChatMessage } from "@/components/ActiveSessionChat";
 import { ServerActiveSessionChat } from "@/components/ServerActiveSessionChat";
 import { availableReplacementVehicleNumbers } from "@/lib/active-vehicle-selection";
@@ -755,8 +754,13 @@ export default function SupervisorModule() {
     operatorName={currentSupervisorActor.name}
     rosterNames={Array.from(new Set([...guideActiveSessions, ...guideStandbySessions].flatMap(session => session.memberIds.map(memberId => guideMembers.find(member => member.id === memberId)?.name).filter((name): name is string => Boolean(name)))))}
     memberOptions={snapshot.directoryUsers.filter(user => /ไกด์|ช่าง|guide|mechanic/i.test(user.group ?? "")).map(user => ({ name: user.name, group: user.group }))}
-    activeNames={guideActiveSessions.flatMap(session => session.memberIds.map(memberId => guideMembers.find(member => member.id === memberId)?.name).filter((name): name is string => Boolean(name)))}
-    activeEventId={activeSessionEventId(guideSessions)}
+    activeGroups={guideActiveSessions.map(session => ({
+      sessionId: session.sessionId,
+      memberNames: session.memberIds.map(memberId => guideMembers.find(member => member.id === memberId)?.name).filter((name): name is string => Boolean(name)),
+      activeUserName: session.activeUserName,
+      startedAt: session.startedAt,
+      durationMinutes: session.durationMinutes,
+    }))}
   /></section></>;
   const HeroIcon = tab === "database" ? Database : tab === "dashboard" ? LayoutDashboard : tab === "queuePayout" ? CalendarDays : tab === "issues" ? CalendarDays : tab === "communication" ? MessageCircle : tab === "settings" ? Settings2 : BarChart3;
   const heroTitle = tab === "database" ? "ฐานข้อมูล" : topNav.find(item => item.id === tab)?.label ?? (tab === "queuePayout" ? "หน้าคิวและตารางค่ารอบ" : "Supervisor");

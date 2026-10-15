@@ -12,7 +12,6 @@ import CommunicationChat from "@/components/CommunicationChat";
 import ModuleLogoutButton from "@/components/ModuleLogoutButton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { activeSessionEventId } from "@/lib/active-session-event";
 import { deriveVehicleStatusesFromActive } from "@/lib/active-vehicle-status";
 import { buildDailyActiveTimeline, DAILY_TIME_SLOTS, groupDailyActiveTimelineBySlot } from "@/lib/daily-active-timeline";
 import { extractGuideVehicleNumber, GUIDE_REPAIR_SCREEN, mergeGuideRepairReports, type GuideRepairReport } from "@/lib/mechanic-guide-repair";
@@ -727,8 +726,14 @@ export default function GuideModule3() {
   if (screen === "dailySummary") return <main className="m3-shell">{sessionFollowPopup}<button className="m3-back" onClick={() => { setQueuePayoutView("daily"); setScreen("queuePayout"); }}><ArrowLeft size={16} /> กลับบอร์ดบันทึกรายวัน</button><section className="m3-panel"><div className="m3-panel-title"><div><p>DAILY BOARD / SUMMARY</p><h2>{dailySummaryTitle}</h2><span>วันที่ {dailyDateLabel}</span></div><span>{dailySummarySessions.length} รายการ</span></div><div className="m3-daily-filter-list">{dailySummarySessions.length ? dailySummarySessions.map(session => <button type="button" className="m3-session-row" key={session.sessionId} onClick={() => openSession(session)}><b>{session.memberIds.map(id => members.find(member => member.id === id)?.name).filter(Boolean).join(" · ") || session.activeUserName || "ไม่ระบุผู้ปฏิบัติงาน"}</b><span>โปรแกรม {session.durationMinutes} นาที · R {session.riderCount} · P {session.passengerCount}</span><small>{session.status === "Active" ? "กำลังทำงาน" : "จบแล้ว"}</small></button>) : <p className="m3-empty">ไม่มีรายการในกลุ่มนี้</p>}</div></section></main>;
   if (screen === "queuePayout" && queuePayoutView === "daily") {
     const atvQueueRoster = Array.from(new Set([...activeSessions, ...standbySessions].flatMap(session => session.memberIds.map(memberId => members.find(member => member.id === memberId)?.name).filter((name): name is string => Boolean(name)))));
-    const atvActiveNames = activeSessions.flatMap(session => session.memberIds.map(memberId => members.find(member => member.id === memberId)?.name).filter((name): name is string => Boolean(name)));
-    return <main className="m3-shell m3-queue-host">{header}{mainTabs}{queuePayoutTabs}<section className="m3-queue-body"><TeamBoardQueueModule operatorName={currentOperatorName ?? activeUser?.name ?? "ผู้ใช้งานปัจจุบัน"} rosterNames={atvQueueRoster} memberOptions={directoryUsers.filter(user => /ไกด์|ช่าง|guide|mechanic/i.test(user.group ?? "")).map(user => ({ name: user.name, group: user.group }))} activeNames={atvActiveNames} activeEventId={activeSessionEventId(sessions)} /></section></main>;
+    const atvActiveGroups = activeSessions.map(session => ({
+      sessionId: session.sessionId,
+      memberNames: session.memberIds.map(memberId => members.find(member => member.id === memberId)?.name).filter((name): name is string => Boolean(name)),
+      activeUserName: session.activeUserName,
+      startedAt: session.startedAt,
+      durationMinutes: session.durationMinutes,
+    }));
+    return <main className="m3-shell m3-queue-host">{header}{mainTabs}{queuePayoutTabs}<section className="m3-queue-body"><TeamBoardQueueModule operatorName={currentOperatorName ?? activeUser?.name ?? "ผู้ใช้งานปัจจุบัน"} rosterNames={atvQueueRoster} memberOptions={directoryUsers.filter(user => /ไกด์|ช่าง|guide|mechanic/i.test(user.group ?? "")).map(user => ({ name: user.name, group: user.group }))} activeGroups={atvActiveGroups} /></section></main>;
   }
   if (screen === "queuePayout" && queuePayoutView === "payout") {
     const payoutRoundColumns = PAYOUT_ROUND_COLUMNS;
