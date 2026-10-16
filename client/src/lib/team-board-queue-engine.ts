@@ -27,7 +27,7 @@ export type ActiveRun = {
   memberUnits?: Record<string, JobUnits>;
   mode: JobMode;
   startedAt: number;
-  durationSeconds?: number;
+  durationSeconds?: number | null;
   /** The canonical Active event that owns this run. External-owned runs do not expire locally. */
   externalEventId?: string;
   /** The source 2.3 Active Session that owns this run, when applicable. */
@@ -81,7 +81,7 @@ export type DispatchInput = {
   compensationEventId?: string;
   splitMemberId?: string;
   memberUnits?: Record<string, JobUnits>;
-  durationSeconds?: number;
+  durationSeconds?: number | null;
 };
 
 export type TransitionResult = { state: QueueState; run?: ActiveRun; error?: string };

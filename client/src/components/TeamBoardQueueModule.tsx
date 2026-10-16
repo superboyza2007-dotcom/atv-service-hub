@@ -3,8 +3,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Activity, ArrowRight, Check, ChevronRight, Clock3, ListFilter, LockKeyhole, Play, ShieldCheck, UserRound, UsersRound, X, Zap } from "lucide-react";
 import { completeRun, createQueueState, dispatch as engineDispatch, planByRequiredUnits, type BoardMember, type QueueEvent, type QueueState } from "@/lib/team-board-queue-engine";
 import { expandActiveRunSelection, recordActive, recordActiveSessions, restoreLegacyAtvMirrorRuns, selectVisibleActiveRuns } from "@/lib/team-board-mirror-engine";
+import { expiredLocalRunIds, runClock } from "@/lib/team-board-run-timing";
 import { trpc } from "@/lib/trpc";
-import { parseOperationsSnapshot, serializeOperationsSnapshot } from "@/lib/operations-snapshot";
+import { OPERATIONS_SNAPSHOT_KEYS, parseOperationsSnapshot, serializeOperationsSnapshot } from "@/lib/operations-snapshot";
 import { groupStandbyCardItems, selectStandbyCardItems, type RegistrationRow } from "@/lib/team-board-queue-view";
 
 type QueueMemberOption = { name: string; group?: string };
@@ -12,7 +13,7 @@ type ActiveSessionNameGroup = { sessionId: string; memberNames: string[]; active
 const CUSTOM_NAME_OPTION = "__atv_custom_name__";
 const shifts = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00"];
 const DAILY_SECTION_SLOTS = ["08:00", "10:00", "13:00", "15:00"] as const;
-const durationOptions = [15, 30, 45, 60];
+const durationOptions: Array<number | null> = [15, 30, 45, 60, null];
 const initialRows = shifts.slice(0, 3).map((shift, index) => ({ id: `row-${index + 1}`, shift, slot1: "", slot2: "" }));
 const DEFAULT_ACCESS_CODE = "123456";
 const SHADOW_DISPLAY_NAME = "";
@@ -102,7 +103,7 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
   const [engineState, setEngineState] = useState<QueueState | null>(null);
   const engineRef = useRef<QueueState | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
-  const [duration, setDuration] = useState(30);
+  const [duration, setDuration] = useState<number | null>(30);
   const [commandUnits, setCommandUnits] = useState("1");
   const [mirrorMode, setMirrorMode] = useState(false);
   const [mirrorEventId, setMirrorEventId] = useState("mirror-001");
@@ -116,6 +117,8 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
   const [changeCodeOpen, setChangeCodeOpen] = useState(false);
   const [changeCodeError, setChangeCodeError] = useState("");
   const sharedQueueQuery = trpc.runQueue.get.useQuery(undefined, { retry: false, refetchInterval: 1000, enabled: true });
+  const guideSessionsSourceQuery = trpc.operationsSnapshots.get.useQuery({ key: OPERATIONS_SNAPSHOT_KEYS.guideSessions }, { retry: false, refetchInterval: 1000 });
+  const guideStateSourceQuery = trpc.operationsSnapshots.get.useQuery({ key: OPERATIONS_SNAPSHOT_KEYS.guideState }, { retry: false, refetchInterval: 1000 });
   const sharedQueueMutation = trpc.runQueue.save.useMutation({ onError: () => setQueueWarning("บันทึก Run Queue ลง Server ไม่สำเร็จ กรุณาลองใหม่") });
   const accessUnlockMutation = trpc.runQueue.access.unlock.useMutation();
   const accessChangeMutation = trpc.runQueue.access.change.useMutation();
@@ -193,12 +196,12 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
       const state = engineRef.current;
       if (!state) return;
       const now = Date.now();
-      state.active.filter((run) => !run.externalEventId && now - run.startedAt >= (run.durationSeconds ?? duration) * 1000).forEach((run) => {
-        const result = completeRun(engineRef.current!, run.id, now);
+      expiredLocalRunIds(state.active, now, duration).forEach((runId) => {
+        const result = completeRun(engineRef.current!, runId, now);
         if (!result.error) {
           engineRef.current = result.state;
           setEngineState(result.state);
-          setQueueReads((logs) => [`${new Date().toLocaleTimeString("th-TH")}  ${run.id} → Timer expired / returned to queue tail`, ...logs].slice(0, 8));
+          setQueueReads((logs) => [`${new Date().toLocaleTimeString("th-TH")}  ${runId} → Timer expired / returned to queue tail`, ...logs].slice(0, 8));
         }
       });
     }, 1000);
@@ -264,28 +267,47 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
 
   const state = engineState;
   const members = useMemo(() => state ? sortedMembers(state) : [], [state]);
-  const sourceActiveGroups = activeGroups ?? [];
+  const guideSessionSnapshot = parseOperationsSnapshot<{ sessions?: unknown[] }>(guideSessionsSourceQuery.data);
+  const guideStateSnapshot = parseOperationsSnapshot<{ members?: Array<{ id: string; name: string }> }>(guideStateSourceQuery.data);
+  const guideNamesById = new Map((guideStateSnapshot?.members ?? []).map((member) => [String(member.id), member.name]));
+  const sharedActiveGroups: ActiveSessionNameGroup[] = (guideSessionSnapshot?.sessions ?? []).flatMap((value) => {
+    if (!value || typeof value !== "object") return [];
+    const session = value as { sessionId?: unknown; status?: unknown; memberIds?: unknown; activeUserName?: unknown; startedAt?: unknown; durationMinutes?: unknown };
+    if (session.status !== "Active" || typeof session.sessionId !== "string") return [];
+    const memberNames = Array.isArray(session.memberIds)
+      ? session.memberIds.map((id) => guideNamesById.get(String(id))).filter((name): name is string => Boolean(name))
+      : [];
+    return [{
+      sessionId: session.sessionId,
+      memberNames,
+      ...(typeof session.activeUserName === "string" ? { activeUserName: session.activeUserName } : {}),
+      ...(typeof session.startedAt === "string" ? { startedAt: session.startedAt } : {}),
+      ...(typeof session.durationMinutes === "number" ? { durationMinutes: session.durationMinutes } : {}),
+    }];
+  });
+  const sourceActiveGroups = Array.from(new Map([...sharedActiveGroups, ...(activeGroups ?? [])].map((group) => [group.sessionId, group])).values());
+  const hasSourceActiveInput = activeGroups !== undefined || guideSessionsSourceQuery.isSuccess;
   const sourceActiveNames = new Set(sourceActiveGroups.flatMap((group) => group.memberNames).map((name) => name.trim().toLocaleLowerCase("th-TH")).filter(Boolean));
   const sourceActiveIds = new Set(members.filter((member) => sourceActiveNames.has(member.name.trim().toLocaleLowerCase("th-TH"))).map((member) => member.id));
   const sourceActiveSessions = sourceActiveGroups.map((group) => ({
     sessionId: group.sessionId,
     memberIds: group.memberNames.map((name) => members.find((member) => member.name.trim().toLocaleLowerCase("th-TH") === name.trim().toLocaleLowerCase("th-TH"))?.id).filter((id): id is string => Boolean(id)),
     startedAt: group.startedAt ? Date.parse(group.startedAt) : undefined,
-    durationSeconds: Math.max(1, Math.round((group.durationMinutes ?? duration) * 60)),
+    durationSeconds: null,
   }));
   const engineActiveRuns = state?.active ?? [];
   const activeIds = new Set([...engineActiveRuns.flatMap((run) => run.memberIds), ...Array.from(sourceActiveIds)]);
   const visibleQueueState = state;
   // 2.3 owns source-session cards; keep queue mirrors internal for the existing return lifecycle.
-  const activeRuns = selectVisibleActiveRuns(engineActiveRuns, activeGroups !== undefined);
-  const activeRunCount = activeRuns.length + (activeGroups === undefined ? 0 : sourceActiveGroups.length);
+  const activeRuns = selectVisibleActiveRuns(engineActiveRuns, hasSourceActiveInput);
+  const activeRunCount = activeRuns.length + sourceActiveGroups.length;
 
   const atvMirrorKey = `${activeEventId}:${sourceActiveGroups.map((group) => `${group.sessionId}:${group.memberNames.map((name) => name.trim().toLocaleLowerCase("th-TH")).join(",")}:${group.startedAt ?? ""}:${group.durationMinutes ?? ""}`).join("|") || activeNames.map((name) => name.trim().toLocaleLowerCase("th-TH")).filter(Boolean).join("|")}`;
   const atvMirrorRef = useRef("");
   useEffect(() => {
     if (!engineRef.current || atvMirrorRef.current === atvMirrorKey) return;
     const normalized = new Map(members.map((member) => [member.name.trim().toLocaleLowerCase("th-TH"), member.id]));
-    if (activeGroups !== undefined) {
+    if (hasSourceActiveInput) {
       if (sourceActiveGroups.some((group) => group.memberNames.some((name) => name.trim() && !normalized.has(name.trim().toLocaleLowerCase("th-TH"))))) {
         setQueueWarning("พบชื่อจาก 2.3 Active ที่ยังไม่มีในคิวตั้งต้น จึงยังไม่เอาเข้าคำนวณ");
         return;
@@ -311,16 +333,16 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
       engineRef.current = result.state;
       setEngineState(result.state);
     }
-  }, [activeNames, activeEventId, activeGroups, atvMirrorKey, duration, members, sourceActiveGroups, sourceActiveSessions]);
+  }, [activeNames, activeEventId, activeGroups, atvMirrorKey, duration, hasSourceActiveInput, members, sourceActiveGroups, sourceActiveSessions]);
 
   useEffect(() => {
-    if (activeGroups === undefined || !engineState || !sharedQueueHydrated.current || readOnly) return;
+    if (!hasSourceActiveInput || !engineState || !sharedQueueHydrated.current || readOnly) return;
     const restored = restoreLegacyAtvMirrorRuns(engineState);
     if (!restored) return;
     engineRef.current = restored;
     setEngineState(restored);
     setQueueReads((logs) => [`${new Date().toLocaleTimeString("th-TH")}  ATV_SOURCE_ACTIVE → removed legacy synthetic Active; queue order restored without adding rounds`, ...logs].slice(0, 8));
-  }, [activeGroups, engineState, readOnly]);
+  }, [activeGroups, engineState, hasSourceActiveInput, readOnly]);
   if (sharedQueueQuery.isError) return <div className="queue-shared-empty" role="alert">เชื่อมต่อ Run Queue บน Server ไม่ได้ กรุณาลองใหม่</div>;
   if (!sharedQueueHydrated.current) return <div className="queue-shared-empty" role="status">กำลังโหลด Run Queue จาก Server…</div>;
   if (readOnly) return state ? <QueueDisplayBoard operatorName={operatorName} members={members} state={visibleQueueState ?? state} onNavigate={() => undefined} /> : <div className="queue-shared-empty">ยังไม่มีข้อมูล Shared Run Queue</div>;
@@ -422,7 +444,7 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
 
   if (screen === "dashboard" && !secretUnlocked) return <QueueDisplayBoard operatorName={operatorName} members={members} state={visibleQueueState ?? state} onNavigate={setScreen} />;
 
-  return <div className={`app-shell ${secretUnlocked ? "restricted-mode" : ""}`}><aside className="sidebar"><div className="brand"><div className="brand-mark" aria-label="queue slot mark"><span>[[</span><i /><span>]]</span></div><div><strong>team board</strong><span>daily registered guides</span></div></div><div className="sidebar-kicker">STEP 02 / RUN QUEUE</div><nav className="nav-list"><button className="nav-item active" onClick={() => setScreen("dashboard")}><Activity size={17} />Dashboard<span className="nav-count">05</span></button><button className="nav-item" onClick={() => setScreen("queue")}><ListFilter size={17} />คิวตั้งต้น<span className="nav-count">{state.standby.length}</span></button><button className="nav-item" onClick={() => openRegistration()}><UsersRound size={17} />แก้คิวตั้งต้น<span className="nav-count">{members.length}</span></button><button className="nav-item" onClick={() => setScreen("events")}><Clock3 size={17} />Event log<span className="nav-count">{state.events.length}</span></button></nav><div className="sidebar-bottom"><div className="system-status"><span className="pulse-dot" />Simulation mode<span>engine v1</span></div><div className="side-note"><LockKeyhole size={15} />ข้อมูลมาจากช่องกรอกเท่านั้น</div></div></aside><main className="main-canvas"><div className="run-queue-toolbar"><button className="clear-button" onClick={() => setScreen("queue")}><ListFilter size={15} />กลับคิวตั้งต้น</button><button className="dispatch-button reset-run-button" onClick={resetRunQueue}>↻ ล้างประวัติรันคิวใหม่</button></div><section className="cards-grid"><BoardCard index="02" title="คิว Standby หลัก" subtitle="ลำดับรันของ Te / Dp / Wk" items={standbyCard} empty="ไม่มีสมาชิกใน Standby" groupTeams /><div className="status-cards-row"><BoardCard index="03" title="สถานะ Dp / Drop List" subtitle="ยังอยู่ใน Standby และนับรอบคู่" items={dpCard} empty="ยังไม่มี Dp" showRounds compact /><BoardCard index="04" title="ตัวลอย ^" subtitle="สถานะรายบุคคล: ว่าง / กำลังทำงาน" items={floatingCard} empty="ไม่มีตัวลอย" showFloatingState activeIds={activeIds} compact /><BoardCard index="05" title="สถานะ QL & QF" subtitle="แสดงคู่เดียวกันพร้อมบทบาทคิวหลัก / คิวรอง" items={qCard} empty="ยังไม่มี QL หรือ QF" groupQv compact /></div></section><div className="workspace-grid"><section className={`panel active-panel ${secretUnlocked ? "" : "secure-feature-hidden"}`}><div className="panel-heading"><div><div className="section-index">06 / ACTIVE ZONE</div><h2>รายการที่กำลังทำงาน</h2></div><span className="badge badge-teal"><span className="pulse-dot small" />{activeRunCount} runs</span></div>{activeRunCount === 0 ? <div className="empty-state"><div className="empty-mark"><Zap size={23} /></div><strong>ยังไม่มีรายการ Active</strong><span>รายการจะแสดงตามสถานะจริงใน 2.3 Active</span></div> : <div className="active-list">{activeGroups !== undefined && sourceActiveGroups.map((group) => <SourceActiveCard key={group.sessionId} group={group} members={members} />)}{activeRuns.map((run) => <ActiveCard key={run.id} run={run} state={state} duration={duration} onComplete={() => complete(run.id)} />)}</div>}</section><section className={`panel directory-panel ${secretUnlocked ? "" : "secure-feature-hidden"}`} id="board"><div className="panel-heading"><div><div className="section-index">07 / STANDBY SELECTOR</div><h2>{mirrorMode ? "คืนคิวจากรายการ Active" : "สั่งรันคิวตามจำนวนทีม"}</h2></div><span className={`count-chip ${mirrorMode ? "mirror-chip" : "command-chip"}`}>{mirrorMode ? "ACTIVE RETURN" : `${commandUnits} ทีม`}</span></div><div className="duration-selector" aria-label="เลือกเวลาโปรแกรม"><div className="duration-selector-label"><Clock3 size={14} /><span>เวลาโปรแกรม</span><strong>{duration} วินาที</strong></div><div className="duration-options">{durationOptions.map((seconds) => <button type="button" key={seconds} className={`duration-option ${duration === seconds ? "active" : ""}`} onClick={() => setDuration(seconds)}>{seconds} วิ</button>)}</div></div><div className="mode-switch command-route-switch" aria-label="เลือกฟังก์ชันการทำงาน"><button type="button" className={`mode-button command-route-button ${mirrorMode ? "active" : ""}`} onClick={() => { setMirrorMode(true); setSelected([]); }}><ShieldCheck size={14} /><span><strong>Active Return</strong><small>คืนคิวจากรายการ Active</small></span></button><button type="button" className={`mode-button command-route-button ${!mirrorMode ? "active" : ""}`} onClick={() => { setMirrorMode(false); setSelected([]); }}><Play size={14} /><span><strong>Command Dispatch</strong><small>สั่งรันจากจำนวนทีม</small></span></button></div>{queueWarning && !mirrorMode && <div className="queue-warning" role="alert"><strong>ตรวจพบความไม่สอดคล้อง</strong><span>{queueWarning}</span></div>}{mirrorMode ? <><div className="mirror-event-field"><label>eventId สำหรับคืนคิว</label><input value={mirrorEventId} onChange={(event) => setMirrorEventId(event.target.value)} placeholder="เช่น board-2026-08-17-001" /><span>รายการซ้ำจะถูก ignore ไม่ dispatch ซ้ำ</span></div><div className="directory-list">{available.map((member) => <button className={`member-row ${selected.includes(member.id) ? "selected" : ""}`} key={member.id} onClick={() => setSelected((current) => current.includes(member.id) ? current.filter((id) => id !== member.id) : [...current, member.id])}><span className={`checkbox ${selected.includes(member.id) ? "checked" : ""}`}>{selected.includes(member.id) && <Check size={13} />}</span><TeamAvatar member={member} /><span className="member-copy"><strong className={member.isShadow ? "shadow-name" : ""}>{member.name}</strong><span>{member.isShadow ? "แสดงผลเท่านั้น · ไม่คำนวณ" : `${member.shift} · ${member.rounds} rounds`}</span></span><span className="state-tag state-standby">{roleLabel[member.role]}</span></button>)}</div><div className="directory-footer"><span><UserRound size={15} /> {members.length} คนจาก Daily Board</span><button className="clear-button" onClick={() => setSelected([])}>Clear selection</button></div><div className="selector-controls"><button className="dispatch-button" onClick={recordSelectedActive}><ShieldCheck size={15} />ส่งรายการ Active เพื่อคืนคิว</button></div></> : <><div className="panel-heading"><div><div className="section-index">06 / COMMAND DISPATCH</div><h2>สั่งรันคิวตามจำนวนทีม</h2><span className="card-subtitle">คำนวณจากคำสั่งนี้ ไม่อ่านรายการ Active เพื่อ dispatch</span></div><span className="count-chip command-chip">{commandUnits} ทีม</span></div><div className="command-form"><label><span>จำนวนคำสั่งทีม</span><input aria-label="จำนวนคำสั่งทีม" type="number" min="0.5" max="5.5" step="0.5" list="queue-unit-presets" value={commandUnits} onChange={(event) => setCommandUnits(event.target.value)} /><datalist id="queue-unit-presets"><option value="0.5" /><option value="1" /><option value="1.5" /><option value="2" /><option value="2.5" /><option value="3" /><option value="3.5" /><option value="4" /><option value="4.5" /><option value="5" /><option value="5.5" /></datalist></label><div className="command-presets" aria-label="ตัวเลือกจำนวนทีม">{[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5].map((units) => <button type="button" className={`command-preset ${commandUnits === String(units) ? "active" : ""}`} key={units} onClick={() => setCommandUnits(String(units))}>{units.toFixed(1)}</button>)}</div><button className="dispatch-button command-submit" onClick={runQueue}><Play size={15} />ส่งคำสั่งรันคิว</button></div><div className="command-note"><span>กฎเดิมยังทำงานครบ</span><small>Dp → ตัวลอย ^ → Split · ส่วน Active ใช้สำหรับคืนคิวผ่าน Active Return</small></div></>}</section></div></main></div>;
+  return <div className={`app-shell ${secretUnlocked ? "restricted-mode" : ""}`}><aside className="sidebar"><div className="brand"><div className="brand-mark" aria-label="queue slot mark"><span>[[</span><i /><span>]]</span></div><div><strong>team board</strong><span>daily registered guides</span></div></div><div className="sidebar-kicker">STEP 02 / RUN QUEUE</div><nav className="nav-list"><button className="nav-item active" onClick={() => setScreen("dashboard")}><Activity size={17} />Dashboard<span className="nav-count">05</span></button><button className="nav-item" onClick={() => setScreen("queue")}><ListFilter size={17} />คิวตั้งต้น<span className="nav-count">{state.standby.length}</span></button><button className="nav-item" onClick={() => openRegistration()}><UsersRound size={17} />แก้คิวตั้งต้น<span className="nav-count">{members.length}</span></button><button className="nav-item" onClick={() => setScreen("events")}><Clock3 size={17} />Event log<span className="nav-count">{state.events.length}</span></button></nav><div className="sidebar-bottom"><div className="system-status"><span className="pulse-dot" />Simulation mode<span>engine v1</span></div><div className="side-note"><LockKeyhole size={15} />ข้อมูลมาจากช่องกรอกเท่านั้น</div></div></aside><main className="main-canvas"><div className="run-queue-toolbar"><button className="clear-button" onClick={() => setScreen("queue")}><ListFilter size={15} />กลับคิวตั้งต้น</button><button className="dispatch-button reset-run-button" onClick={resetRunQueue}>↻ ล้างประวัติรันคิวใหม่</button></div><section className="cards-grid"><BoardCard index="02" title="คิว Standby หลัก" subtitle="ลำดับรันของ Te / Dp / Wk" items={standbyCard} empty="ไม่มีสมาชิกใน Standby" groupTeams /><div className="status-cards-row"><BoardCard index="03" title="สถานะ Dp / Drop List" subtitle="ยังอยู่ใน Standby และนับรอบคู่" items={dpCard} empty="ยังไม่มี Dp" showRounds compact /><BoardCard index="04" title="ตัวลอย ^" subtitle="สถานะรายบุคคล: ว่าง / กำลังทำงาน" items={floatingCard} empty="ไม่มีตัวลอย" showFloatingState activeIds={activeIds} compact /><BoardCard index="05" title="สถานะ QL & QF" subtitle="แสดงคู่เดียวกันพร้อมบทบาทคิวหลัก / คิวรอง" items={qCard} empty="ยังไม่มี QL หรือ QF" groupQv compact /></div></section><div className="workspace-grid"><section className={`panel active-panel ${secretUnlocked ? "" : "secure-feature-hidden"}`}><div className="panel-heading"><div><div className="section-index">06 / ACTIVE ZONE</div><h2>รายการที่กำลังทำงาน</h2></div><span className="badge badge-teal"><span className="pulse-dot small" />{activeRunCount} runs</span></div>{activeRunCount === 0 ? <div className="empty-state"><div className="empty-mark"><Zap size={23} /></div><strong>ยังไม่มีรายการ Active</strong><span>รายการจะแสดงตามสถานะจริงใน 2.3 Active</span></div> : <div className="active-list">{sourceActiveGroups.map((group) => <SourceActiveCard key={group.sessionId} group={group} members={members} />)}{activeRuns.map((run) => <ActiveCard key={run.id} run={run} state={state} duration={duration} onComplete={() => complete(run.id)} />)}</div>}</section><section className={`panel directory-panel ${secretUnlocked ? "" : "secure-feature-hidden"}`} id="board"><div className="panel-heading"><div><div className="section-index">07 / STANDBY SELECTOR</div><h2>{mirrorMode ? "คืนคิวจากรายการ Active" : "สั่งรันคิวตามจำนวนทีม"}</h2></div><span className={`count-chip ${mirrorMode ? "mirror-chip" : "command-chip"}`}>{mirrorMode ? "ACTIVE RETURN" : `${commandUnits} ทีม`}</span></div><div className="duration-selector" aria-label="เลือกเวลาโปรแกรม"><div className="duration-selector-label"><Clock3 size={14} /><span>เวลาโปรแกรม</span><strong>{duration === null ? "ไม่จำกัด" : `${duration} วินาที`}</strong></div><div className="duration-options">{durationOptions.map((seconds) => <button type="button" key={seconds ?? "unlimited"} className={`duration-option ${duration === seconds ? "active" : ""}`} onClick={() => setDuration(seconds)}>{seconds === null ? "ไม่จำกัด" : `${seconds} วิ`}</button>)}</div></div><div className="mode-switch command-route-switch" aria-label="เลือกฟังก์ชันการทำงาน"><button type="button" className={`mode-button command-route-button ${mirrorMode ? "active" : ""}`} onClick={() => { setMirrorMode(true); setSelected([]); }}><ShieldCheck size={14} /><span><strong>Active Return</strong><small>คืนคิวจากรายการ Active</small></span></button><button type="button" className={`mode-button command-route-button ${!mirrorMode ? "active" : ""}`} onClick={() => { setMirrorMode(false); setSelected([]); }}><Play size={14} /><span><strong>Command Dispatch</strong><small>สั่งรันจากจำนวนทีม</small></span></button></div>{queueWarning && !mirrorMode && <div className="queue-warning" role="alert"><strong>ตรวจพบความไม่สอดคล้อง</strong><span>{queueWarning}</span></div>}{mirrorMode ? <><div className="mirror-event-field"><label>eventId สำหรับคืนคิว</label><input value={mirrorEventId} onChange={(event) => setMirrorEventId(event.target.value)} placeholder="เช่น board-2026-08-17-001" /><span>รายการซ้ำจะถูก ignore ไม่ dispatch ซ้ำ</span></div><div className="directory-list">{available.map((member) => <button className={`member-row ${selected.includes(member.id) ? "selected" : ""}`} key={member.id} onClick={() => setSelected((current) => current.includes(member.id) ? current.filter((id) => id !== member.id) : [...current, member.id])}><span className={`checkbox ${selected.includes(member.id) ? "checked" : ""}`}>{selected.includes(member.id) && <Check size={13} />}</span><TeamAvatar member={member} /><span className="member-copy"><strong className={member.isShadow ? "shadow-name" : ""}>{member.name}</strong><span>{member.isShadow ? "แสดงผลเท่านั้น · ไม่คำนวณ" : `${member.shift} · ${member.rounds} rounds`}</span></span><span className="state-tag state-standby">{roleLabel[member.role]}</span></button>)}</div><div className="directory-footer"><span><UserRound size={15} /> {members.length} คนจาก Daily Board</span><button className="clear-button" onClick={() => setSelected([])}>Clear selection</button></div><div className="selector-controls"><button className="dispatch-button" onClick={recordSelectedActive}><ShieldCheck size={15} />ส่งรายการ Active เพื่อคืนคิว</button></div></> : <><div className="panel-heading"><div><div className="section-index">06 / COMMAND DISPATCH</div><h2>สั่งรันคิวตามจำนวนทีม</h2><span className="card-subtitle">คำนวณจากคำสั่งนี้ ไม่อ่านรายการ Active เพื่อ dispatch</span></div><span className="count-chip command-chip">{commandUnits} ทีม</span></div><div className="command-form"><label><span>จำนวนคำสั่งทีม</span><input aria-label="จำนวนคำสั่งทีม" type="number" min="0.5" max="5.5" step="0.5" list="queue-unit-presets" value={commandUnits} onChange={(event) => setCommandUnits(event.target.value)} /><datalist id="queue-unit-presets"><option value="0.5" /><option value="1" /><option value="1.5" /><option value="2" /><option value="2.5" /><option value="3" /><option value="3.5" /><option value="4" /><option value="4.5" /><option value="5" /><option value="5.5" /></datalist></label><div className="command-presets" aria-label="ตัวเลือกจำนวนทีม">{[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5].map((units) => <button type="button" className={`command-preset ${commandUnits === String(units) ? "active" : ""}`} key={units} onClick={() => setCommandUnits(String(units))}>{units.toFixed(1)}</button>)}</div><button className="dispatch-button command-submit" onClick={runQueue}><Play size={15} />ส่งคำสั่งรันคิว</button></div><div className="command-note"><span>กฎเดิมยังทำงานครบ</span><small>Dp → ตัวลอย ^ → Split · ส่วน Active ใช้สำหรับคืนคิวผ่าน Active Return</small></div></>}</section></div></main></div>;
 }
 
 function BoardCard({ index, title, subtitle, items, empty, showRounds, showFloatingState, activeIds, groupTeams, groupQv, compact }: { index: string; title: string; subtitle: string; items: BoardMember[]; empty: string; showRounds?: boolean; showFloatingState?: boolean; activeIds?: Set<string>; groupTeams?: boolean; groupQv?: boolean; compact?: boolean }) {
@@ -503,17 +525,11 @@ function ChangeCodeDialog({ oldCode, nextCode, confirmCode, error, onOldCode, on
 }
 
 function SourceActiveCard({ group, members }: { group: ActiveSessionNameGroup; members: BoardMember[] }) {
-  const [remaining, setRemaining] = useState<number | null>(null);
-  useEffect(() => {
-    if (!group.startedAt || !group.durationMinutes) { setRemaining(null); return; }
-    const endAt = Date.parse(group.startedAt) + group.durationMinutes * 60_000;
-    if (!Number.isFinite(endAt)) { setRemaining(null); return; }
-    const tick = () => setRemaining(Math.max(0, Math.ceil((endAt - Date.now()) / 1000)));
-    tick();
-    const timer = window.setInterval(tick, 500);
-    return () => window.clearInterval(timer);
-  }, [group.startedAt, group.durationMinutes]);
   const visibleNames = group.memberNames.length ? group.memberNames : group.activeUserName ? [group.activeUserName] : [];
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
+  const startedAt = group.startedAt ? Date.parse(group.startedAt) : Number.NaN;
+  const elapsed = Number.isFinite(startedAt) ? Math.max(0, Math.floor((now - startedAt) / 1000)) : null;
   return <article className="active-card" data-source-session-id={group.sessionId}>
     <div className="active-card-top"><span className="run-id">{group.sessionId}</span><span className="state-tag state-active">2.3 ACTIVE</span></div>
     <div className="active-members"><div className="active-team-label">SOURCE SESSION / 2.3 ACTIVE</div>
@@ -522,16 +538,17 @@ function SourceActiveCard({ group, members }: { group: ActiveSessionNameGroup; m
         return <div className="active-member-line" key={`${group.sessionId}:${name}:${index}`}>{member ? <TeamAvatar member={member} /> : <span className="member-avatar">2.3</span>}<strong>{name}</strong><span>{member ? roleLabel[member.role] : "ต้นทาง"}</span></div>;
       })}
     </div>
-    <div className="active-meta"><span>กำหนด {group.durationMinutes ? `${group.durationMinutes} นาที` : "ไม่ระบุเวลา"} · จาก 2.3 Active</span><span className="countdown"><Clock3 size={15} />{remaining === null ? "—" : formatClock(remaining)}</span></div>
+    <div className="active-meta"><span>เวลาจริง · จาก 2.3 Active</span><span className="countdown"><Clock3 size={15} />{elapsed === null ? "—" : formatClock(elapsed)}</span></div>
     <small>อ่านสถานะจาก session ต้นทาง · จบรายการใน 2.3 แล้วการ์ดนี้จะหายไป</small>
   </article>;
 }
 
-function ActiveCard({ run, state, duration, onComplete }: { run: QueueState["active"][number]; state: QueueState; duration: number; onComplete: () => void }) {
-  const [remaining, setRemaining] = useState(0);
-  useEffect(() => { const runDuration = run.durationSeconds ?? duration; const tick = () => setRemaining(Math.max(0, Math.ceil((run.startedAt + runDuration * 1000 - Date.now()) / 1000))); tick(); const timer = window.setInterval(tick, 500); return () => window.clearInterval(timer); }, [run.startedAt, run.durationSeconds, duration]);
+function ActiveCard({ run, state, duration, onComplete }: { run: QueueState["active"][number]; state: QueueState; duration: number | null; onComplete: () => void }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
+  const clock = runClock(run, now, duration);
   const activeMembers = run.memberIds.map((id) => state.members[id]).filter(Boolean) as BoardMember[];
-  return <article className="active-card"><div className="active-card-top"><span className="run-id">{run.id}</span><span className="state-tag state-active">ACTIVE</span></div><div className="active-members"><div className="active-team-label">{run.mode === "split" ? "SPLIT RUN / สมาชิกแยกสถานะ" : activeMembers.length > 1 ? "TEAM RUN / สมาชิกในทีม" : "INDIVIDUAL RUN"}</div>{activeMembers.map((member) => <div className="active-member-line" key={member.id}><TeamAvatar member={member} /><strong className={member.isShadow ? "shadow-name" : ""}>{member.name}</strong><span>{roleLabel[member.role]}</span></div>)}{run.externalNames.map((name) => <div className="active-member-line external-line" key={`external-${name}`}><span className="member-avatar">EX</span><strong>{name}</strong><span>External</span></div>)}</div><div className="active-meta"><span>{run.mode === "split" ? "Wk / Dp split" : run.units === 0.5 ? "0.5 round" : "Full team"}</span><span className="countdown"><Clock3 size={15} />{formatClock(remaining)}</span></div><button className="clear-button" onClick={onComplete}>จำลอง Timer หมด / คืนคิว</button></article>;
+  return <article className="active-card"><div className="active-card-top"><span className="run-id">{run.id}</span><span className="state-tag state-active">ACTIVE</span></div><div className="active-members"><div className="active-team-label">{run.mode === "split" ? "SPLIT RUN / สมาชิกแยกสถานะ" : activeMembers.length > 1 ? "TEAM RUN / สมาชิกในทีม" : "INDIVIDUAL RUN"}</div>{activeMembers.map((member) => <div className="active-member-line" key={member.id}><TeamAvatar member={member} /><strong className={member.isShadow ? "shadow-name" : ""}>{member.name}</strong><span>{roleLabel[member.role]}</span></div>)}{run.externalNames.map((name) => <div className="active-member-line external-line" key={`external-${name}`}><span className="member-avatar">EX</span><strong>{name}</strong><span>External</span></div>)}</div><div className="active-meta"><span>{run.mode === "split" ? "Wk / Dp split" : run.units === 0.5 ? "0.5 round" : "Full team"} · {clock.mode === "elapsed" ? "เวลาจริง" : "เหลือ"}</span><span className="countdown"><Clock3 size={15} />{formatClock(clock.seconds)}</span></div><button className="clear-button" onClick={onComplete}>คืนคิว / จบรายการ</button></article>;
 }
 
 

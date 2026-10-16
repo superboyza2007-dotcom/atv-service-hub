@@ -6,7 +6,7 @@ export type MirrorActiveInput = {
   eventId: string;
   activeMemberIds: string[];
   now?: number;
-  durationSeconds?: number;
+  durationSeconds?: number | null;
 };
 
 export type MirrorRecordResult = TransitionResult & {
@@ -20,7 +20,7 @@ export type MirrorActiveSession = {
   sessionId: string;
   memberIds: string[];
   startedAt?: number;
-  durationSeconds: number;
+  durationSeconds: number | null;
 };
 
 export type MirrorActiveSessionsInput = {
@@ -44,7 +44,7 @@ export function expandActiveRunSelection(state: QueueState, ids: string[]): stri
   return Array.from(selected);
 }
 
-function inferDispatch(state: QueueState, ids: string[], now: number, durationSeconds?: number): TransitionResult {
+function inferDispatch(state: QueueState, ids: string[], now: number, durationSeconds?: number | null): TransitionResult {
   const selected = ids.map((id) => state.members[id]).filter(Boolean);
   if (selected.length === 1) {
     const member = selected[0];
@@ -227,7 +227,7 @@ export function recordActiveSessions(inputState: QueueState, input: MirrorActive
     ...session,
     sessionId: session.sessionId.trim(),
     memberIds: unique(session.memberIds),
-    durationSeconds: Math.max(1, Math.floor(session.durationSeconds)),
+    durationSeconds: session.durationSeconds === null ? null : Math.max(1, Math.floor(session.durationSeconds)),
   })).filter(session => session.sessionId && session.memberIds.length);
   const duplicate = sessions.find((session, index) => sessions.findIndex(item => item.sessionId === session.sessionId) !== index);
   if (duplicate) return { state, error: `2.3 Active มี Session ซ้ำ: ${duplicate.sessionId}` };
