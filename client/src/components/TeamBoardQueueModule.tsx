@@ -1,7 +1,7 @@
 /* Mission Control Ledger: UI contract follows Daily Board → 5 cards → Active/Run Queue. No seeded roster. */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Activity, ArrowRight, Check, ChevronRight, Clock3, ListFilter, LockKeyhole, Play, ShieldCheck, UserRound, UsersRound, X, Zap } from "lucide-react";
-import { completeRun, createQueueState, dispatch as engineDispatch, planByRequiredUnits, type BoardMember, type QueueEvent, type QueueState } from "@/lib/team-board-queue-engine";
+import { completeRun, createQueueState, dispatch as engineDispatch, normalizeStandbyTeamPairs, planByRequiredUnits, type BoardMember, type QueueEvent, type QueueState } from "@/lib/team-board-queue-engine";
 import { expandActiveRunSelection, recordActive, recordActiveSessions, restoreLegacyAtvMirrorRuns, selectVisibleActiveRuns } from "@/lib/team-board-mirror-engine";
 import { expiredLocalRunIds, runClock } from "@/lib/team-board-run-timing";
 import { trpc } from "@/lib/trpc";
@@ -138,8 +138,9 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
     const remote = parseOperationsSnapshot<{ state?: QueueState; draftRows?: unknown; updatedAt?: number }>(sharedQueueQuery.data);
     if (isRegistrationRows(remote?.draftRows)) setRows(remote.draftRows);
     if (remote?.state) {
-      engineRef.current = remote.state;
-      setEngineState(remote.state);
+      const normalizedState = normalizeStandbyTeamPairs(remote.state);
+      engineRef.current = normalizedState;
+      setEngineState(normalizedState);
       setScreen("dashboard");
       lastPersistedAt.current = remote.updatedAt ?? 0;
     }

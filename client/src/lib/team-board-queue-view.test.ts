@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createQueueState, type BoardMember } from "./team-board-queue-engine";
+import { createQueueState, normalizeStandbyTeamPairs, type BoardMember } from "./team-board-queue-engine";
 import { groupStandbyCardItems, mergeStandbyIdsPreservingQueue, selectStandbyCardItems } from "./team-board-queue-view";
 
 const member = (id: string, teamId: string, boardOrder: number): BoardMember => ({
@@ -57,6 +57,28 @@ describe("Team Board queue view", () => {
       ["wk"],
       ["shadow"],
     ]);
+  });
+
+  it("returns a late teammate to the first teammate's existing queue position", () => {
+    const boy = { ...member("boy", "team-boy-por", 2), partnerId: "por" };
+    const por = { ...member("por", "team-boy-por", 5), partnerId: "boy" };
+    const nextTeam = { ...member("next-team", "team-next", 3), partnerId: "next-team-2" };
+    const nextTeam2 = { ...member("next-team-2", "team-next", 4), partnerId: "next-team" };
+    const state = createQueueState([boy, nextTeam, nextTeam2, por]);
+    state.standby = ["boy", "next-team", "next-team-2", "por"];
+
+    const normalized = normalizeStandbyTeamPairs(state);
+
+    expect(normalized.standby).toEqual(["boy", "por", "next-team", "next-team-2"]);
+  });
+
+  it("does not reunite a pair until both members are normal Te-", () => {
+    const boy = { ...member("boy", "team-boy-por", 2), partnerId: "por" };
+    const por = { ...member("por", "team-boy-por", 5), partnerId: "boy", role: "dp" as const, underRound: true };
+    const state = createQueueState([boy, por]);
+    state.standby = ["boy", "por"];
+
+    expect(normalizeStandbyTeamPairs(state).standby).toEqual(["boy", "por"]);
   });
 
   it("keeps unrelated queue members when the 2.3 Standby feed contains only part of the roster", () => {

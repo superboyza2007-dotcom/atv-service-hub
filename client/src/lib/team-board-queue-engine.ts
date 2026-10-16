@@ -95,6 +95,39 @@ const pushEvent = (state: QueueState, event: QueueEvent) => { state.events.unshi
 const removeFromQueue = (queue: string[], ids: string[]) => queue.filter((id) => !ids.includes(id));
 const appendUnique = (queue: string[], ids: string[]) => [...queue, ...ids.filter((id) => !queue.includes(id))];
 
+/**
+ * Locked queue invariant: a former team that is fully back to normal Te-
+ * cannot remain split into two Standby positions. Keep the first member's
+ * queue position and place its teammate immediately after it; all other
+ * members retain their relative order.
+ */
+export function normalizeStandbyTeamPairs(inputState: QueueState): QueueState {
+  const state = clone(inputState);
+  const standbySet = new Set(state.standby);
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const id of state.standby) {
+    if (seen.has(id)) continue;
+    const member = state.members[id];
+    if (!member) continue;
+    seen.add(id);
+    normalized.push(id);
+    const partner = member.partnerId ? state.members[member.partnerId] : undefined;
+    const completeNormalTeam = Boolean(
+      member.teamId && partner && partner.teamId === member.teamId &&
+      partner.partnerId === member.id && standbySet.has(partner.id) &&
+      member.role === "te" && partner.role === "te" &&
+      !member.underRound && !partner.underRound,
+    );
+    if (completeNormalTeam) {
+      seen.add(partner!.id);
+      normalized.push(partner!.id);
+    }
+  }
+  state.standby = normalized;
+  return state;
+}
+
 export function createQueueState(input: BoardMember[]): QueueState {
   const members = Object.fromEntries(input.map((member) => [member.id, clone(member)]));
   return { members, standby: input.slice().sort((a, b) => a.boardOrder - b.boardOrder).map((member) => member.id), active: [], qv: {}, events: [], compensatedEventIds: [], nextRun: 1, nextQv: 1, mirrorEventIds: [] };
@@ -383,7 +416,7 @@ export function completeRun(inputState: QueueState, runId: string, now = Date.no
   };
   const qvPairs = Object.values(state.qv).filter((qv) => qv.status === "broken");
   qvPairs.forEach((qv) => joinQfToQl(state.members[qv.dpId], state.members[qv.wkId]));
-  return { state };
+  return { state: normalizeStandbyTeamPairs(state) };
 }
 
 export function queueSnapshot(state: QueueState): QueueSnapshotEntry[] {
