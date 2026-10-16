@@ -18,6 +18,8 @@ describe("Team Board run timing", () => {
     expect(runClock(result.run!, 31_000, 30)).toEqual({ mode: "remaining", seconds: 30 });
     expect(expiredLocalRunIds(result.state.active, 60_999, 30)).toEqual([]);
     expect(expiredLocalRunIds(result.state.active, 61_000, 30)).toEqual([result.run!.id]);
+    expect(runClock(result.run!, 61_000, 30)).toEqual({ mode: "overtime", seconds: 0 });
+    expect(runClock(result.run!, 66_000, 30)).toEqual({ mode: "overtime", seconds: 5 });
   });
 
   it("uses the selected default for older runs without a stored duration", () => {
@@ -35,5 +37,16 @@ describe("Team Board run timing", () => {
     expect(result.state.active[0]?.durationSeconds).toBeNull();
     expect(runClock(result.state.active[0]!, 3_601_000, 30)).toEqual({ mode: "elapsed", seconds: 3_600 });
     expect(expiredLocalRunIds(result.state.active, 99_999_000, 30)).toEqual([]);
+  });
+
+  it("uses the source session duration for a 2.3 Active countdown", () => {
+    const result = recordActiveSessions(createQueueState(board), {
+      eventId: "2.3:finite",
+      sessions: [{ sessionId: "M3-002", memberIds: ["g1"], startedAt: 1_000, durationSeconds: 1_800 }],
+      now: 1_000,
+    });
+    expect(result.state.active[0]?.durationSeconds).toBe(1_800);
+    expect(runClock(result.state.active[0]!, 1_000 + 1_700_000, 60)).toEqual({ mode: "remaining", seconds: 100 });
+    expect(runClock(result.state.active[0]!, 1_000 + 1_805_000, 60)).toEqual({ mode: "overtime", seconds: 5 });
   });
 });

@@ -2,6 +2,12 @@ import type { BoardMember, QueueState } from "./team-board-queue-engine";
 
 export type RegistrationRow = { id: string; shift: string; slot1: string; slot2: string };
 
+/** Merge a canonical Standby feed without replacing the queue engine's order. */
+export function mergeStandbyIdsPreservingQueue(currentStandby: string[], desiredStandby: string[], activeIds: ReadonlySet<string>): string[] {
+  const current = currentStandby.filter((id) => !activeIds.has(id));
+  return [...current, ...desiredStandby.filter((id) => !activeIds.has(id) && !current.includes(id))];
+}
+
 /** Exact membership projection used by the 02 / CARD Standby list. */
 export function selectStandbyCardItems(state: QueueState): BoardMember[] {
   const activeIds = new Set(state.active.flatMap((run) => run.memberIds));

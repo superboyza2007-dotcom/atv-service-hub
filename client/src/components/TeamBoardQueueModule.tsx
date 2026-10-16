@@ -6,7 +6,7 @@ import { expandActiveRunSelection, recordActive, recordActiveSessions, restoreLe
 import { expiredLocalRunIds, runClock } from "@/lib/team-board-run-timing";
 import { trpc } from "@/lib/trpc";
 import { OPERATIONS_SNAPSHOT_KEYS, parseOperationsSnapshot, serializeOperationsSnapshot } from "@/lib/operations-snapshot";
-import { groupStandbyCardItems, selectStandbyCardItems, type RegistrationRow } from "@/lib/team-board-queue-view";
+import { groupStandbyCardItems, mergeStandbyIdsPreservingQueue, selectStandbyCardItems, type RegistrationRow } from "@/lib/team-board-queue-view";
 
 type QueueMemberOption = { name: string; group?: string };
 type ActiveSessionNameGroup = { sessionId: string; memberNames: string[]; activeUserName?: string; startedAt?: string; durationMinutes?: number };
@@ -184,9 +184,9 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
     const desiredIds = Array.from(new Set(standbyNames.map((name) => normalized.get(name.trim().toLocaleLowerCase("th-TH"))).filter((id): id is string => Boolean(id))));
     if (standbyNames.some((name) => name.trim()) && desiredIds.length === 0) return;
     const activeIds = new Set(engineRef.current.active.flatMap((run) => run.memberIds));
-    const nextStandby = desiredIds.filter((id) => !activeIds.has(id));
-    const currentStandby = engineRef.current.standby.filter((id) => !activeIds.has(id));
-    if (nextStandby.join("|") === currentStandby.join("|")) return;
+    // 2.3 Active is a trigger, not an authoritative replacement for the queue.
+    const nextStandby = mergeStandbyIdsPreservingQueue(engineRef.current.standby, desiredIds, activeIds);
+    if (nextStandby.join("|") === engineRef.current.standby.join("|")) return;
     const next = { ...engineRef.current, standby: nextStandby };
     engineRef.current = next;
     setEngineState(next);
@@ -293,7 +293,7 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
     sessionId: group.sessionId,
     memberIds: group.memberNames.map((name) => members.find((member) => member.name.trim().toLocaleLowerCase("th-TH") === name.trim().toLocaleLowerCase("th-TH"))?.id).filter((id): id is string => Boolean(id)),
     startedAt: group.startedAt ? Date.parse(group.startedAt) : undefined,
-    durationSeconds: null,
+    durationSeconds: typeof group.durationMinutes === "number" && Number.isFinite(group.durationMinutes) && group.durationMinutes > 0 ? Math.floor(group.durationMinutes * 60) : null,
   }));
   const engineActiveRuns = state?.active ?? [];
   const activeIds = new Set([...engineActiveRuns.flatMap((run) => run.memberIds), ...Array.from(sourceActiveIds)]);
@@ -529,7 +529,10 @@ function SourceActiveCard({ group, members }: { group: ActiveSessionNameGroup; m
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const startedAt = group.startedAt ? Date.parse(group.startedAt) : Number.NaN;
-  const elapsed = Number.isFinite(startedAt) ? Math.max(0, Math.floor((now - startedAt) / 1000)) : null;
+  const durationSeconds = typeof group.durationMinutes === "number" && Number.isFinite(group.durationMinutes) && group.durationMinutes > 0 ? Math.floor(group.durationMinutes * 60) : null;
+  const clock = Number.isFinite(startedAt) ? runClock({ startedAt, durationSeconds }, now, null) : null;
+  const clockLabel = clock?.mode === "overtime" ? "เวลาบวก" : clock?.mode === "remaining" ? "เหลือ" : "เวลาจริง";
+  const clockValue = clock ? `${clock.mode === "overtime" ? "+" : ""}${formatClock(clock.seconds)}` : "—";
   return <article className="active-card" data-source-session-id={group.sessionId}>
     <div className="active-card-top"><span className="run-id">{group.sessionId}</span><span className="state-tag state-active">2.3 ACTIVE</span></div>
     <div className="active-members"><div className="active-team-label">SOURCE SESSION / 2.3 ACTIVE</div>
@@ -538,7 +541,7 @@ function SourceActiveCard({ group, members }: { group: ActiveSessionNameGroup; m
         return <div className="active-member-line" key={`${group.sessionId}:${name}:${index}`}>{member ? <TeamAvatar member={member} /> : <span className="member-avatar">2.3</span>}<strong>{name}</strong><span>{member ? roleLabel[member.role] : "ต้นทาง"}</span></div>;
       })}
     </div>
-    <div className="active-meta"><span>เวลาจริง · จาก 2.3 Active</span><span className="countdown"><Clock3 size={15} />{elapsed === null ? "—" : formatClock(elapsed)}</span></div>
+    <div className="active-meta"><span>{clockLabel} · จาก 2.3 Active</span><span className="countdown"><Clock3 size={15} />{clockValue}</span></div>
     <small>อ่านสถานะจาก session ต้นทาง · จบรายการใน 2.3 แล้วการ์ดนี้จะหายไป</small>
   </article>;
 }
@@ -548,7 +551,8 @@ function ActiveCard({ run, state, duration, onComplete }: { run: QueueState["act
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const clock = runClock(run, now, duration);
   const activeMembers = run.memberIds.map((id) => state.members[id]).filter(Boolean) as BoardMember[];
-  return <article className="active-card"><div className="active-card-top"><span className="run-id">{run.id}</span><span className="state-tag state-active">ACTIVE</span></div><div className="active-members"><div className="active-team-label">{run.mode === "split" ? "SPLIT RUN / สมาชิกแยกสถานะ" : activeMembers.length > 1 ? "TEAM RUN / สมาชิกในทีม" : "INDIVIDUAL RUN"}</div>{activeMembers.map((member) => <div className="active-member-line" key={member.id}><TeamAvatar member={member} /><strong className={member.isShadow ? "shadow-name" : ""}>{member.name}</strong><span>{roleLabel[member.role]}</span></div>)}{run.externalNames.map((name) => <div className="active-member-line external-line" key={`external-${name}`}><span className="member-avatar">EX</span><strong>{name}</strong><span>External</span></div>)}</div><div className="active-meta"><span>{run.mode === "split" ? "Wk / Dp split" : run.units === 0.5 ? "0.5 round" : "Full team"} · {clock.mode === "elapsed" ? "เวลาจริง" : "เหลือ"}</span><span className="countdown"><Clock3 size={15} />{formatClock(clock.seconds)}</span></div><button className="clear-button" onClick={onComplete}>คืนคิว / จบรายการ</button></article>;
+  const clockLabel = clock.mode === "overtime" ? "เวลาบวก" : clock.mode === "elapsed" ? "เวลาจริง" : "เหลือ";
+  return <article className="active-card"><div className="active-card-top"><span className="run-id">{run.id}</span><span className="state-tag state-active">ACTIVE</span></div><div className="active-members"><div className="active-team-label">{run.mode === "split" ? "SPLIT RUN / สมาชิกแยกสถานะ" : activeMembers.length > 1 ? "TEAM RUN / สมาชิกในทีม" : "INDIVIDUAL RUN"}</div>{activeMembers.map((member) => <div className="active-member-line" key={member.id}><TeamAvatar member={member} /><strong className={member.isShadow ? "shadow-name" : ""}>{member.name}</strong><span>{roleLabel[member.role]}</span></div>)}{run.externalNames.map((name) => <div className="active-member-line external-line" key={`external-${name}`}><span className="member-avatar">EX</span><strong>{name}</strong><span>External</span></div>)}</div><div className="active-meta"><span>{run.mode === "split" ? "Wk / Dp split" : run.units === 0.5 ? "0.5 round" : "Full team"} · {clockLabel}</span><span className="countdown"><Clock3 size={15} />{clock.mode === "overtime" ? "+" : ""}{formatClock(clock.seconds)}</span></div><button className="clear-button" onClick={onComplete}>คืนคิว / จบรายการ</button></article>;
 }
 
 

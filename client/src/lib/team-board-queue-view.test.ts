@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createQueueState, type BoardMember } from "./team-board-queue-engine";
-import { groupStandbyCardItems, selectStandbyCardItems } from "./team-board-queue-view";
+import { groupStandbyCardItems, mergeStandbyIdsPreservingQueue, selectStandbyCardItems } from "./team-board-queue-view";
 
 const member = (id: string, teamId: string, boardOrder: number): BoardMember => ({
   id,
@@ -57,5 +57,10 @@ describe("Team Board queue view", () => {
       ["wk"],
       ["shadow"],
     ]);
+  });
+
+  it("keeps unrelated queue members when the 2.3 Standby feed contains only part of the roster", () => {
+    expect(mergeStandbyIdsPreservingQueue(["a", "b", "c"], ["c"], new Set(["a"]))).toEqual(["b", "c"]);
+    expect(mergeStandbyIdsPreservingQueue(["b", "c"], ["a", "c"], new Set(["c"]))).toEqual(["b", "a"]);
   });
 });
