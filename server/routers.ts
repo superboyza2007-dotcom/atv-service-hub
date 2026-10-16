@@ -205,7 +205,17 @@ export const appRouter = router({
       const actor = futureDiceActorFromContext(ctx);
       try {
         const session = await chooseFutureDiceOutcome({ ...input, actor });
-        await announceFutureDice(ctx, `ผล Future Dice #${session.id} · ทีม ${session.winningTeam} ชนะ · เลือก ${session.selectedOutcome}`);
+        const winningTeam = session.winningTeam;
+        const losingTeam = winningTeam === "A" ? "B" : winningTeam === "B" ? "A" : null;
+        const winnerNames = winningTeam
+          ? session.players.filter(player => player.team === winningTeam).map(player => player.name).join(" และ ")
+          : "ไม่ระบุ";
+        const loserNames = losingTeam
+          ? session.players.filter(player => player.team === losingTeam).map(player => player.name).join(" และ ")
+          : "ไม่ระบุ";
+        const winnerScore = winningTeam ? session.scores[winningTeam] : 0;
+        const loserScore = losingTeam ? session.scores[losingTeam] : 0;
+        await announceFutureDice(ctx, `ผล Future Dice #${session.id} · ผู้ชนะ: ${winnerNames} (ทีม ${winningTeam}) ได้ ${winnerScore} แต้ม · ผู้แพ้: ${loserNames} (ทีม ${losingTeam}) ได้ ${loserScore} แต้ม · ผลลัพธ์ที่ผู้ชนะเลือก: ${session.selectedOutcome}`);
         return session;
       } catch (error) {
         return throwFutureDiceError(error);

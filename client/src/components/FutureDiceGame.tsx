@@ -293,9 +293,13 @@ export default function FutureDiceGame() {
     if (!activeSession) return <div className="body" role="status"><h1>กำลังโหลด Session…</h1></div>;
     const gameMode = displayMode(activeSession.gameMode);
     const isFinished = activeSession.status === "completed";
-    const winnerLabel = activeSession.winningTeam
-      ? gameMode === "2v2" ? `ทีม ${activeSession.winningTeam} ชนะ` : `${winnerMembers[0]?.name ?? `ผู้เล่น ${activeSession.winningTeam}`} ชนะ`
-      : "";
+    const winnerTeam = activeSession.winningTeam;
+    const loserTeam = winnerTeam === "A" ? "B" : winnerTeam === "B" ? "A" : null;
+    const winnerNames = winnerMembers.map(player => player.name).join(" และ ");
+    const loserNames = loserTeam ? activeSession.players.filter(player => player.team === loserTeam).map(player => player.name).join(" และ ") : "";
+    const winnerScore = winnerTeam ? activeSession.scores[winnerTeam] : 0;
+    const loserScore = loserTeam ? activeSession.scores[loserTeam] : 0;
+    const winnerLabel = winnerTeam ? `${gameMode === "2v2" ? `ทีม ${winnerTeam} (${winnerNames})` : winnerNames || `ผู้เล่น ${winnerTeam}`} ชนะ ${winnerScore} แต้ม` : "";
     const choices = activeSession.outcomeType === "minutes" ? ["30", "60"] : ["ไป", "ไม่ไป"];
     return <div className="body">
       <div className="game-head"><div><small>{gameMode}</small><h1>{isFinished ? "ผลการทอย" : "ทอยลูกเต๋า"}</h1></div><span className="round">{activeSession.currentRound > 1 ? `รอบตัดสิน ${activeSession.currentRound}` : `รอบ ${activeSession.currentRound}`}</span></div>
@@ -310,7 +314,7 @@ export default function FutureDiceGame() {
       })}</div>)}</div>
       {wasTiebreak && <p className="round-tie-note">ผลเสมอ · ทอยตัดสินใหม่ในรอบนี้</p>}
       {activeSession.status === "cancelled" ? <div className="action result"><h2>รายการนี้ถูกยกเลิก</h2><button type="button" className="primary" onClick={() => { setActiveSessionId(null); setLatestSession(null); setSelectedPlayers({}); setMode(null); setChoice(null); setPhase("choose"); }}>เริ่มรายการใหม่</button></div>
-        : isFinished ? <div className="action result"><h2>{winnerLabel}</h2><p>{gameMode === "2v2" ? `ทีม A ${activeSession.scores.A} · ทีม B ${activeSession.scores.B}` : `แต้ม ${activeSession.scores.A} ต่อ ${activeSession.scores.B}`}</p>{activeSession.selectedOutcome ? <div className="announcement">ผลสุดท้าย: {activeSession.selectedOutcome}<br /><small>ประกาศในแอปหลักแล้ว</small></div> : canChoose ? <><p>เลือกผลลัพธ์</p><div className="choices">{choices.map(result => <button type="button" className="choice" onClick={() => selectResult(result)} disabled={isBusy} key={result}>{result}</button>)}</div></> : <p>รอสมาชิกทีมผู้ชนะเลือกผล</p>}</div>
+        : isFinished ? <div className="action result"><h2>{winnerLabel}</h2>{winnerTeam && loserTeam && <p>ผู้แพ้: {gameMode === "2v2" ? `ทีม ${loserTeam} (${loserNames})` : loserNames || `ผู้เล่น ${loserTeam}`} ได้ {loserScore} แต้ม</p>}<p>คะแนน: ทีม A {activeSession.scores.A} · ทีม B {activeSession.scores.B}</p>{activeSession.selectedOutcome ? <div className="announcement">ผลลัพธ์ผู้ชนะเลือก: {activeSession.selectedOutcome}<br /><small>ประกาศจาก Server แล้ว</small></div> : canChoose ? <><p>เลือกผลลัพธ์</p><div className="choices">{choices.map(result => <button type="button" className="choice" onClick={() => selectResult(result)} disabled={isBusy} key={result}>{result}</button>)}</div></> : <p>รอสมาชิกทีมผู้ชนะเลือกผล</p>}</div>
           : <div className="action">{!actorPlayer ? <p className="viewer">กำลังดูผล · กดเล่นไม่ได้</p> : canRoll ? <><p className="note">{isCurrentPlayer ? "ถึงตาคุณทอย" : `ทอยแทน ${target?.name}`}</p><button type="button" className="roll" onClick={() => void roll()} disabled={isBusy || Boolean(rollingSlot)}>{isBusy || rollingSlot ? "กำลังทอย…" : "ทอยลูกเต๋า"}</button></> : <p className="note">{target?.isOnline ? `รอ ${target.name} ทอยจากบัญชีของตน` : target ? `รอสมาชิกทีมเดียวกันที่ออนไลน์ทอยแทน ${target.name}` : "รอผลลัพธ์"}</p>}</div>}
       {error && <p className="error" role="alert">{error}</p>}
     </div>;

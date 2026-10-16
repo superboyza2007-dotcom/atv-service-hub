@@ -50,3 +50,22 @@
   #future-dice-mini-root .app-shell { align-items: stretch; padding: 0; }
   #future-dice-mini-root .body { padding: 16px 12px; }
 }
+
+/* Accessibility: every label and status in the dice page uses black text. */
+#future-dice-mini-root .mini,
+#future-dice-mini-root .mini * {
+  color: #111;
+}
+#future-dice-mini-root .footer {
+  background: #f7f7f3;
+  border-top: 2px solid #111;
+}
+#future-dice-mini-root .roll,
+#future-dice-mini-root .start {
+  color: #111;
+}
+#future-dice-mini-root .hint,
+#future-dice-mini-root .p-status,
+#future-dice-mini-root .player-history {
+  color: #111;
+}
