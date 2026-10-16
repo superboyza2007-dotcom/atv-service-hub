@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME } from "@shared/const";
-import { appendAppOperationsSnapshotItem, appendLiveMessage, appendOperationalHistory, clearLiveMessages, getAppOperationsSnapshot, listLiveMessages, listAppDirectoryUsers, listOperationalHistory, mergeAppOperationsSnapshot, replaceAppDirectoryUsers, setAppDirectoryCodeHash, upsertAppOperationsSnapshot, verifyTeamBoardAccessCode, changeTeamBoardAccessCode } from "./db";
+import { appendAppOperationsSnapshotItem, appendLiveMessage, appendOperationalHistory, clearLiveMessages, getAppOperationsSnapshot, getOnlineAppDirectoryUserIds, listLiveMessages, listAppDirectoryUsers, listOperationalHistory, mergeAppOperationsSnapshot, replaceAppDirectoryUsers, setAppDirectoryCodeHash, touchAppDirectoryPresence, upsertAppOperationsSnapshot, verifyTeamBoardAccessCode, changeTeamBoardAccessCode } from "./db";
 import { appDirectorySessionCookieOptions, createDirectorySession, createSpecialDirectorySession, hashDirectoryCode, verifyDirectoryCode, verifySpecialAccessCode, APP_DIRECTORY_SESSION_COOKIE } from "./appDirectoryAuth";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -111,6 +111,11 @@ export const appRouter = router({
       return { id: user.id, name: user.name, group: user.userGroup };
     }),
     me: publicProcedure.query(({ ctx }) => ctx.appSpecialAccess ? { name: SPECIAL_ACCESS_NAME, group: SPECIAL_ACCESS_GROUP, special: true as const } : ctx.appUser ? { id: ctx.appUser.id, name: ctx.appUser.name, group: ctx.appUser.userGroup, special: false as const } : null),
+    heartbeat: appProtectedProcedure.mutation(async ({ ctx }) => {
+      if (!ctx.appUser) return { tracked: false } as const;
+      await touchAppDirectoryPresence(ctx.appUser.id);
+      return { tracked: true } as const;
+    }),
     verifyCurrentCode: appProtectedProcedure.input(z.object({ code: z.string().trim().min(1).max(128) })).mutation(({ ctx, input }) => {
       if (ctx.appSpecialAccess) return verifySpecialAccessCode(input.code);
       return ctx.appUser ? verifyDirectoryCode(input.code, ctx.appUser) : false;
@@ -145,6 +150,10 @@ export const appRouter = router({
     }),
   }),
   futureDice: router({
+    roster: appProtectedProcedure.query(async () => {
+      const [directoryUsers, onlineUserIds] = await Promise.all([listAppDirectoryUsers(), getOnlineAppDirectoryUserIds()]);
+      return directoryUsers.map(user => ({ id: user.id, name: user.name, group: user.userGroup, isOnline: onlineUserIds.has(Number(user.id)) }));
+    }),
     list: appProtectedProcedure.input(z.object({ limit: z.number().int().min(1).max(30).optional() }).optional()).query(async ({ input }) => {
       try {
         return await listFutureDiceSessions(input?.limit ?? 12);
@@ -158,11 +167,8 @@ export const appRouter = router({
       directoryUserIds: z.array(z.number().int().positive()).min(2).max(4),
     })).mutation(async ({ ctx, input }) => {
       const actor = futureDiceActorFromContext(ctx);
-      if (!actor.isSupervisor) throw new TRPCError({ code: "FORBIDDEN", message: "เฉพาะหัวหน้าหรือสิทธิ์พิเศษเท่านั้นที่เริ่มเกมได้" });
       try {
-        const session = await createFutureDiceSession({ actor, ...input });
-        await announceFutureDice(ctx, `เริ่มเกม Future Dice #${session.id} · ${session.gameMode === "one_vs_one" ? "1v1" : "2v2"}`);
-        return session;
+        return await createFutureDiceSession({ actor, ...input });
       } catch (error) {
         return throwFutureDiceError(error);
       }
@@ -170,13 +176,7 @@ export const appRouter = router({
     roll: appProtectedProcedure.input(z.object({ sessionId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const actor = futureDiceActorFromContext(ctx);
       try {
-        const session = await rollFutureDice({ sessionId: input.sessionId, actor });
-        const lastRoll = session.players.flatMap(player => player.roll ? [{ player, roll: player.roll }] : []).sort((a, b) => b.player.turnOrder - a.player.turnOrder)[0];
-        await announceFutureDice(ctx, lastRoll ? `Future Dice #${session.id} · ${lastRoll.player.slot} ${lastRoll.player.name} ทอยได้ ${lastRoll.roll.dieOne} + ${lastRoll.roll.dieTwo}` : `Future Dice #${session.id} บันทึกผลทอยแล้ว`);
-        if (session.status === "completed") {
-          await announceFutureDice(ctx, session.winningTeam ? `Future Dice #${session.id} จบเกม · ทีม ${session.winningTeam} ชนะ ${session.scores.A}:${session.scores.B}` : `Future Dice #${session.id} จบเกมเสมอ ${session.scores.A}:${session.scores.B}`);
-        }
-        return session;
+        return await rollFutureDice({ sessionId: input.sessionId, actor });
       } catch (error) {
         return throwFutureDiceError(error);
       }
@@ -186,10 +186,9 @@ export const appRouter = router({
       selectedOutcome: z.string().trim().min(1).max(16),
     })).mutation(async ({ ctx, input }) => {
       const actor = futureDiceActorFromContext(ctx);
-      if (!actor.isSupervisor) throw new TRPCError({ code: "FORBIDDEN", message: "เฉพาะหัวหน้าหรือสิทธิ์พิเศษเท่านั้นที่เลือกผลลัพธ์ได้" });
       try {
-        const session = await chooseFutureDiceOutcome(input);
-        await announceFutureDice(ctx, `Future Dice #${session.id} · ทีม ${session.winningTeam} เลือกผลลัพธ์ ${session.selectedOutcome}`);
+        const session = await chooseFutureDiceOutcome({ ...input, actor });
+        await announceFutureDice(ctx, `ผล Future Dice #${session.id} · ทีม ${session.winningTeam} ชนะ · เลือก ${session.selectedOutcome}`);
         return session;
       } catch (error) {
         return throwFutureDiceError(error);
@@ -211,9 +210,7 @@ export const appRouter = router({
       const actor = futureDiceActorFromContext(ctx);
       if (!actor.isSupervisor) throw new TRPCError({ code: "FORBIDDEN", message: "เฉพาะหัวหน้าหรือสิทธิ์พิเศษเท่านั้นที่ยกเลิกเกมได้" });
       try {
-        const session = await cancelFutureDiceSession(input.sessionId);
-        await announceFutureDice(ctx, `Future Dice #${session.id} ถูกยกเลิกโดย ${actor.name}`);
-        return session;
+        return await cancelFutureDiceSession(input.sessionId);
       } catch (error) {
         return throwFutureDiceError(error);
       }

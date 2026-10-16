@@ -31,6 +31,27 @@ export function teamForFutureDiceSlot(slot: FutureDiceSlot): FutureDiceTeam {
   return slot.startsWith("A") ? "A" : "B";
 }
 
+export function canRollFutureDice(input: {
+  actorDirectoryUserId?: number;
+  targetDirectoryUserId: number | null;
+  targetOnline: boolean;
+  actorTeam?: FutureDiceTeam;
+  targetTeam: FutureDiceTeam;
+}): boolean {
+  if (input.actorDirectoryUserId == null || input.targetDirectoryUserId == null) return false;
+  if (input.actorDirectoryUserId === input.targetDirectoryUserId) return true;
+  return !input.targetOnline && input.actorTeam === input.targetTeam;
+}
+
+export function canChooseFutureDiceOutcome(input: {
+  actorDirectoryUserId?: number;
+  winningTeam: FutureDiceTeam | null;
+  players: Array<{ directoryUserId: number | null; team: FutureDiceTeam }>;
+}): boolean {
+  return input.actorDirectoryUserId != null && input.winningTeam != null
+    && input.players.some(player => player.team === input.winningTeam && player.directoryUserId === input.actorDirectoryUserId);
+}
+
 export function outcomeChoicesForFutureDiceType(outcomeType: FutureDiceOutcomeType): string[] {
   return outcomeType === "minutes" ? ["30", "60"] : ["ไป", "ไม่ไป"];
 }

@@ -29,6 +29,13 @@
       "when": 1790558400000,
       "tag": "0003_server_authoritative_future_dice",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1792140000000,
+      "tag": "0004_dice_mini_integration",
+      "breakpoints": true
     }
   ]
 }

@@ -53,11 +53,20 @@ function SpecialChooser({ identity, onLogout }: { identity: AppIdentity; onLogou
 
 export default function AppAccessGate({ requestedModule, children }: AppAccessGateProps) {
   const sessionQuery = trpc.directory.me.useQuery(undefined, { retry: false, refetchOnWindowFocus: true });
+  const presenceMutation = trpc.directory.heartbeat.useMutation();
   const logoutMutation = trpc.auth.logout.useMutation();
   const [error, setError] = useState("");
   const identity = identityFromServerSession(sessionQuery.data);
   const storedModule = identity?.module ?? null;
   const hasAccess = Boolean(identity && requestedModule && canOpenModule(identity, requestedModule));
+
+  useEffect(() => {
+    if (identity?.memberId == null) return;
+    const heartbeat = () => presenceMutation.mutate();
+    heartbeat();
+    const timer = window.setInterval(heartbeat, 20_000);
+    return () => window.clearInterval(timer);
+  }, [identity?.memberId, presenceMutation.mutate]);
 
   useEffect(() => {
     if (!identity || identity.special || requestedModule || !storedModule) return;
