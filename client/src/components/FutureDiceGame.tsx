@@ -182,7 +182,10 @@ export default function FutureDiceGame() {
   const isCurrentPlayer = Boolean(target && currentUserId != null && target.directoryUserId === currentUserId);
   const mayCoverOfflineTeammate = Boolean(target && activeSession?.gameMode === "two_vs_two" && !target.isOnline && actorPlayer && actorPlayer.team === target.team && actorPlayer.directoryUserId !== target.directoryUserId);
   const canRoll = Boolean(activeSession?.status === "open" && target && (isCurrentPlayer || mayCoverOfflineTeammate) && !isBusy && !rollingSlot);
-  const canReset = Boolean(activeSession?.status === "open" && (actorPlayer || identityQuery.data?.special || identityQuery.data?.group?.includes("หัวหน้า")));
+  const isAwaitingWinnerChoice = Boolean(activeSession?.status === "completed" && activeSession.winningTeam != null && activeSession.selectedOutcome == null);
+  const isCancellableSession = Boolean(activeSession?.status === "open" || isAwaitingWinnerChoice);
+  const canReset = Boolean(isCancellableSession && (actorPlayer || identityQuery.data?.special || identityQuery.data?.group?.includes("หัวหน้า")));
+  const staleActiveSession = Boolean(isCancellableSession && activeSession && !activeSession.players.some(player => player.isOnline) && now - sessionTime(activeSession.updatedAt) >= 30_000);
   const winnerMembers = activeSession?.winningTeam ? activeSession.players.filter(player => player.team === activeSession.winningTeam) : [];
   const canChoose = Boolean(currentUserId != null && winnerMembers.some(player => player.directoryUserId === currentUserId));
   const expectedSlotCount = activeSession ? (activeSession.gameMode === "one_vs_one" ? 2 : 4) : (selectedMode === "1v1" ? 2 : 4);
@@ -203,7 +206,7 @@ export default function FutureDiceGame() {
   };
 
   const resetGame = async () => {
-    if (!activeSession || activeSession.status !== "open" || cancelMutation.isPending) return;
+    if (!activeSession || !isCancellableSession || (!canReset && !staleActiveSession) || cancelMutation.isPending) return;
     setError("");
     try {
       await cancelMutation.mutateAsync({ sessionId: activeSession.id });
@@ -324,7 +327,7 @@ export default function FutureDiceGame() {
     const choices = activeSession.outcomeType === "minutes" ? ["30", "60"] : ["ไป", "ไม่ไป"];
     return <div className="body">
       <div className="game-head"><div><small>{gameMode}</small><h1>{isFinished ? "ผลการทอย" : "ทอยลูกเต๋า"}</h1></div><span className="round">{activeSession.currentRound > 1 ? `รอบตัดสิน ${activeSession.currentRound}` : `รอบ ${activeSession.currentRound}`}</span></div>
-      <div className="game-controls"><button type="button" className="back-app" onClick={closePopup}>กลับหน้าก่อนหน้า</button>{activeSession.status === "open" && canReset && <button type="button" className="reset-game" onClick={() => void resetGame()} disabled={isBusy}>{cancelMutation.isPending ? "กำลังยกเลิก…" : "รีเซ็ต / ยกเลิกการทอย"}</button>}</div>
+      <div className="game-controls"><button type="button" className="back-app" onClick={closePopup}>กลับหน้าก่อนหน้า</button>{isCancellableSession && (canReset || staleActiveSession) && <button type="button" className="reset-game" onClick={() => void resetGame()} disabled={isBusy}>{cancelMutation.isPending ? "กำลังยกเลิก…" : staleActiveSession && !canReset ? "ยกเลิกเกมค้างเพื่อเริ่มรายการใหม่" : "รีเซ็ต / ยกเลิกการทอย"}</button>}</div>
       {gameMode === "2v2" && <div className="score"><span>ทีม A <b>{activeSession.scores.A}</b></span><span>—</span><span>ทีม B <b>{activeSession.scores.B}</b></span></div>}
       <div className="table">{(["A", "B"] as const).map(team => <div className={`side ${team === "B" ? "b" : ""}`} key={team}><div className="side-head">{gameMode === "1v1" ? (team === "A" ? "ผู้เล่น A" : "ผู้เล่น B") : `ทีม ${team}`}</div>{activeSession.players.filter(player => player.team === team).map(player => {
         const rollResult = player.rolls.find(rollItem => rollItem.round === activeSession.currentRound);
