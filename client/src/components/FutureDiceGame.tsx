@@ -137,21 +137,16 @@ export default function FutureDiceGame() {
 
   useEffect(() => {
     if (!isOpen || !activeSession?.selectedOutcome) return;
-    const ageMs = Date.now() - sessionTime(activeSession.updatedAt);
-    const remainingMs = Math.max(3_000, 8_000 - ageMs);
     const sessionId = activeSession.id;
-    const timer = window.setTimeout(() => {
-      setDismissedSessionId(sessionId);
-      setIsOpen(false);
-      setActiveSessionId(null);
-      setLatestSession(null);
-      setSelectedPlayers({});
-      setPhase("choose");
-      setMode(null);
-      setChoice(null);
-      setError("");
-    }, remainingMs);
-    return () => window.clearTimeout(timer);
+    setDismissedSessionId(sessionId);
+    setIsOpen(false);
+    setActiveSessionId(null);
+    setLatestSession(null);
+    setSelectedPlayers({});
+    setPhase("choose");
+    setMode(null);
+    setChoice(null);
+    setError("");
   }, [isOpen, activeSession?.id, activeSession?.selectedOutcome, activeSession?.updatedAt]);
 
   const createMutation = trpc.futureDice.create.useMutation({
@@ -347,7 +342,7 @@ export default function FutureDiceGame() {
       })}</div>)}</div>
       {wasTiebreak && <p className="round-tie-note">ผลเสมอ · ทอยตัดสินใหม่ในรอบนี้</p>}
       {activeSession.status === "cancelled" ? <div className="action result"><h2>รายการนี้ถูกยกเลิก</h2><button type="button" className="primary" onClick={() => { setActiveSessionId(null); setLatestSession(null); setSelectedPlayers({}); setMode(null); setChoice(null); setPhase("choose"); }}>เริ่มรายการใหม่</button></div>
-        : isFinished ? <div className="action result"><h2>{winnerLabel}</h2>{winnerTeam && loserTeam && <p>ผู้แพ้: {gameMode === "2v2" ? `ทีม ${loserTeam} (${loserNames})` : loserNames || `ผู้เล่น ${loserTeam}`} ได้ {loserScore} แต้ม</p>}<p>คะแนน: ทีม A {activeSession.scores.A} · ทีม B {activeSession.scores.B}</p>{activeSession.selectedOutcome ? <div className="announcement">ผลลัพธ์ผู้ชนะเลือก: {activeSession.selectedOutcome}<br /><small>ประกาศจาก Server แล้ว</small></div> : canChoose ? <><p>เลือกผลลัพธ์</p><div className="choices">{choices.map(result => <button type="button" className="choice" onClick={() => selectResult(result)} disabled={isBusy} key={result}>{result}</button>)}</div></> : <p>รอสมาชิกทีมผู้ชนะเลือกผล</p>}</div>
+        : isFinished ? <div className="action result"><h2>{winnerLabel}</h2>{winnerTeam && loserTeam && <p>ผู้แพ้: {gameMode === "2v2" ? `ทีม ${loserTeam} (${loserNames})` : loserNames || `ผู้เล่น ${loserTeam}`} ได้ {loserScore} แต้ม</p>}<p>คะแนน: ทีม A {activeSession.scores.A} · ทีม B {activeSession.scores.B}</p>{activeSession.selectedOutcome ? <div className="announcement">ผลลัพธ์ที่ผู้ชนะเลือก: {activeSession.selectedOutcome}</div> : canChoose ? <><p>เลือกผลลัพธ์</p><div className="choices">{choices.map(result => <button type="button" className="choice" onClick={() => selectResult(result)} disabled={isBusy} key={result}>{result}</button>)}</div></> : <p>รอสมาชิกทีมผู้ชนะเลือกผล</p>}</div>
           : <div className="action">{!actorPlayer ? <p className="viewer">กำลังดูผล · กดเล่นไม่ได้</p> : canRoll ? <><p className="note">{isCurrentPlayer ? "ถึงตาคุณทอย" : `ทอยแทน ${target?.name}`}</p><button type="button" className="roll" onClick={() => void roll()} disabled={isBusy || Boolean(rollingSlot)}>{isBusy || rollingSlot ? "กำลังทอย…" : "ทอยลูกเต๋า"}</button></> : <p className="note">{target?.isOnline ? `รอ ${target.name} ทอยจากบัญชีของตน` : target ? `รอสมาชิกทีมเดียวกันที่ออนไลน์ทอยแทน ${target.name}` : "รอผลลัพธ์"}</p>}</div>}
       {error && <p className="error" role="alert">{error}</p>}
     </div>;

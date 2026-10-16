@@ -215,7 +215,7 @@ export const appRouter = router({
           : "ไม่ระบุ";
         const winnerScore = winningTeam ? session.scores[winningTeam] : 0;
         const loserScore = losingTeam ? session.scores[losingTeam] : 0;
-        await announceFutureDice(ctx, `ผล Future Dice #${session.id} · ผู้ชนะ: ${winnerNames} (ทีม ${winningTeam}) ได้ ${winnerScore} แต้ม · ผู้แพ้: ${loserNames} (ทีม ${losingTeam}) ได้ ${loserScore} แต้ม · ผลลัพธ์ที่ผู้ชนะเลือก: ${session.selectedOutcome}`);
+        await announceFutureDice(ctx, `ผู้ชนะ: ${winnerNames} (ทีม ${winningTeam}) ได้ ${winnerScore} แต้ม · ผู้แพ้: ${loserNames} (ทีม ${losingTeam}) ได้ ${loserScore} แต้ม · ผลลัพธ์ที่ผู้ชนะเลือก: ${session.selectedOutcome}`);
         return session;
       } catch (error) {
         return throwFutureDiceError(error);
