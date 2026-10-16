@@ -8,7 +8,6 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import GuideModule3 from "./pages/GuideModule3";
 import MechanicModule from "./pages/MechanicModule";
 import SupervisorModule from "./pages/SupervisorModule";
-import FutureDiceGame from "./components/FutureDiceGame";
 import FutureDiceResultToast from "./components/FutureDiceResultToast";
 import { PttRoomProvider } from "./components/PttRoom";
 import AppAccessGate from "./components/AppAccessGate";
@@ -27,7 +26,6 @@ export default function App() {
           <PttRoomProvider>
             <FutureDiceResultToast />
             {isMechanicModule ? <MechanicModule /> : isSupervisorModule ? <SupervisorModule /> : <GuideModule3 />}
-            {!isSupervisorModule && <FutureDiceGame />}
           </PttRoomProvider>
         </AppAccessGate>
       </ThemeProvider>
