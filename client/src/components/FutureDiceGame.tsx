@@ -166,18 +166,23 @@ export default function FutureDiceGame() {
     onSuccess: session => { setLatestSession(session); setActiveSessionId(session.id); void utils.futureDice.get.invalidate({ sessionId: session.id }); void utils.futureDice.list.invalidate(); },
     onError: cause => setError(errorMessage(cause)),
   });
+  const cancelMutation = trpc.futureDice.cancel.useMutation({
+    onSuccess: () => { void utils.futureDice.list.invalidate(); },
+    onError: cause => setError(errorMessage(cause)),
+  });
 
   const visibleSlots = selectedMode === "1v1" ? ["A1", "B1"] as Slot[] : slotOrder;
   const chosenIds = visibleSlots.map(slot => selectedPlayers[slot]).filter((id): id is number => id != null);
   const hasDistinctCompleteRoster = chosenIds.length === visibleSlots.length && new Set(chosenIds).size === visibleSlots.length;
   const teamHasOnlinePlayer = (team: Team) => visibleSlots.some(slot => slotTeam(slot) === team && roster.some(user => user.id === selectedPlayers[slot] && user.isOnline));
   const canCreate = rosterQuery.isSuccess && sessionsQuery.isSuccess && hasDistinctCompleteRoster && (selectedMode === "1v1" || (teamHasOnlinePlayer("A") && teamHasOnlinePlayer("B"))) && !createMutation.isPending;
-  const isBusy = createMutation.isPending || rollMutation.isPending || chooseMutation.isPending;
+  const isBusy = createMutation.isPending || rollMutation.isPending || chooseMutation.isPending || cancelMutation.isPending;
   const actorPlayer = activeSession?.players.find(player => player.directoryUserId === currentUserId);
   const target = activeSession?.status === "open" ? activeSession.currentPlayer : null;
   const isCurrentPlayer = Boolean(target && currentUserId != null && target.directoryUserId === currentUserId);
   const mayCoverOfflineTeammate = Boolean(target && activeSession?.gameMode === "two_vs_two" && !target.isOnline && actorPlayer && actorPlayer.team === target.team && actorPlayer.directoryUserId !== target.directoryUserId);
   const canRoll = Boolean(activeSession?.status === "open" && target && (isCurrentPlayer || mayCoverOfflineTeammate) && !isBusy && !rollingSlot);
+  const canReset = Boolean(activeSession?.status === "open" && (actorPlayer || identityQuery.data?.special || identityQuery.data?.group?.includes("หัวหน้า")));
   const winnerMembers = activeSession?.winningTeam ? activeSession.players.filter(player => player.team === activeSession.winningTeam) : [];
   const canChoose = Boolean(currentUserId != null && winnerMembers.some(player => player.directoryUserId === currentUserId));
   const expectedSlotCount = activeSession ? (activeSession.gameMode === "one_vs_one" ? 2 : 4) : (selectedMode === "1v1" ? 2 : 4);
@@ -196,6 +201,22 @@ export default function FutureDiceGame() {
     setChoice(null);
     setError("");
   };
+
+  const resetGame = async () => {
+    if (!activeSession || activeSession.status !== "open" || cancelMutation.isPending) return;
+    setError("");
+    try {
+      await cancelMutation.mutateAsync({ sessionId: activeSession.id });
+      closePopup();
+    } catch {
+      // The mutation hook supplies the server's message.
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen || activeSession?.status !== "cancelled") return;
+    closePopup();
+  }, [isOpen, activeSession?.status]);
 
   const choosePlayer = (slot: Slot, value: string) => {
     setSelectedPlayers(current => {
@@ -303,6 +324,7 @@ export default function FutureDiceGame() {
     const choices = activeSession.outcomeType === "minutes" ? ["30", "60"] : ["ไป", "ไม่ไป"];
     return <div className="body">
       <div className="game-head"><div><small>{gameMode}</small><h1>{isFinished ? "ผลการทอย" : "ทอยลูกเต๋า"}</h1></div><span className="round">{activeSession.currentRound > 1 ? `รอบตัดสิน ${activeSession.currentRound}` : `รอบ ${activeSession.currentRound}`}</span></div>
+      <div className="game-controls"><button type="button" className="back-app" onClick={closePopup}>กลับหน้าก่อนหน้า</button>{activeSession.status === "open" && canReset && <button type="button" className="reset-game" onClick={() => void resetGame()} disabled={isBusy}>{cancelMutation.isPending ? "กำลังยกเลิก…" : "รีเซ็ต / ยกเลิกการทอย"}</button>}</div>
       {gameMode === "2v2" && <div className="score"><span>ทีม A <b>{activeSession.scores.A}</b></span><span>—</span><span>ทีม B <b>{activeSession.scores.B}</b></span></div>}
       <div className="table">{(["A", "B"] as const).map(team => <div className={`side ${team === "B" ? "b" : ""}`} key={team}><div className="side-head">{gameMode === "1v1" ? (team === "A" ? "ผู้เล่น A" : "ผู้เล่น B") : `ทีม ${team}`}</div>{activeSession.players.filter(player => player.team === team).map(player => {
         const rollResult = player.rolls.find(rollItem => rollItem.round === activeSession.currentRound);

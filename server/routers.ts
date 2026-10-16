@@ -235,9 +235,8 @@ export const appRouter = router({
     }),
     cancel: appProtectedProcedure.input(z.object({ sessionId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const actor = futureDiceActorFromContext(ctx);
-      if (!actor.isSupervisor) throw new TRPCError({ code: "FORBIDDEN", message: "เฉพาะหัวหน้าหรือสิทธิ์พิเศษเท่านั้นที่ยกเลิกเกมได้" });
       try {
-        return await cancelFutureDiceSession(input.sessionId);
+        return await cancelFutureDiceSession({ sessionId: input.sessionId, actor });
       } catch (error) {
         return throwFutureDiceError(error);
       }

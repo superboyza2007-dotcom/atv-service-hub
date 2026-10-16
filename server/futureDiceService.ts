@@ -404,16 +404,28 @@ export async function setFutureDiceOutcomeType(input: {
   return updated;
 }
 
-export async function cancelFutureDiceSession(sessionId: number): Promise<FutureDiceSessionView> {
+export async function cancelFutureDiceSession(input: { sessionId: number; actor: FutureDiceActor }): Promise<FutureDiceSessionView> {
   const db = requireDatabase(await getDb());
+  const session = (await db.select().from(futureDiceSessions).where(eq(futureDiceSessions.id, input.sessionId)).limit(1))[0];
+  if (!session) throw new FutureDiceServiceError("ไม่พบเกมที่เลือก");
+  if (session.status !== "open") throw new FutureDiceServiceError("ยกเลิกได้เฉพาะเกมที่กำลังดำเนินอยู่");
+  const players = await db.select({ directoryUserId: futureDicePlayers.directoryUserId })
+    .from(futureDicePlayers).where(eq(futureDicePlayers.sessionId, input.sessionId));
+  const isParticipant = input.actor.directoryUserId != null && (
+    session.createdByDirectoryUserId === input.actor.directoryUserId
+    || players.some(player => player.directoryUserId === input.actor.directoryUserId)
+  );
+  if (!input.actor.isSupervisor && !isParticipant) {
+    throw new FutureDiceServiceError("ยกเลิกได้เฉพาะผู้เล่นในเกม ผู้สร้างเกม หรือหัวหน้าเท่านั้น");
+  }
   const update = await db.update(futureDiceSessions).set({ status: "cancelled", completedAt: new Date() })
-    .where(and(eq(futureDiceSessions.id, sessionId), eq(futureDiceSessions.status, "open")));
+    .where(and(eq(futureDiceSessions.id, input.sessionId), eq(futureDiceSessions.status, "open")));
   if (Number(update[0].affectedRows ?? 0) !== 1) {
     throw new FutureDiceServiceError("ยกเลิกได้เฉพาะเกมที่กำลังดำเนินอยู่");
   }
-  const session = await getFutureDiceSession(sessionId);
-  if (!session) throw new FutureDiceServiceError("ไม่พบเกมหลังยกเลิก");
-  return session;
+  const cancelledSession = await getFutureDiceSession(input.sessionId);
+  if (!cancelledSession) throw new FutureDiceServiceError("ไม่พบเกมหลังยกเลิก");
+  return cancelledSession;
 }
 
 export function isFutureDiceRuleError(error: unknown): error is FutureDiceRuleError | FutureDiceServiceError {
