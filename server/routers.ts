@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME } from "@shared/const";
-import { appendAppOperationsSnapshotItem, appendLiveMessage, appendOperationalHistory, clearLiveMessages, getAppOperationsSnapshot, getOnlineAppDirectoryUserIds, listLiveMessages, listAppDirectoryUsers, listOperationalHistory, mergeAppOperationsSnapshot, replaceAppDirectoryUsers, setAppDirectoryCodeHash, touchAppDirectoryPresence, upsertAppOperationsSnapshot } from "./db";
+import { appendAppOperationsSnapshotItem, appendLiveMessage, appendOperationalHistory, clearLiveMessages, getAppOperationsSnapshot, getOnlineAppDirectoryUserIds, listLiveMessages, listAppDirectoryUsers, listOperationalHistory, mergeAppOperationsSnapshot, replaceAppDirectoryUsers, setAppDirectoryCodeHash, touchAppDirectoryPresence, upsertAppOperationsSnapshot, verifyTeamBoardAccessCode, changeTeamBoardAccessCode } from "./db";
 import { appDirectorySessionCookieOptions, createDirectorySession, createSpecialDirectorySession, hashDirectoryCode, verifyDirectoryCode, verifySpecialAccessCode, APP_DIRECTORY_SESSION_COOKIE } from "./appDirectoryAuth";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -267,6 +267,14 @@ export const appRouter = router({
     save: appProtectedProcedure.input(z.object({ payload: z.string().max(2_000_000) })).mutation(async ({ input }) => {
       await upsertAppOperationsSnapshot(RUN_QUEUE_SNAPSHOT_KEY, input.payload);
       return { success: true } as const;
+    }),
+    access: router({
+      unlock: appProtectedProcedure.input(z.object({ code: z.string().trim().min(1).max(128) })).mutation(({ input }) => verifyTeamBoardAccessCode(input.code)),
+      change: appProtectedProcedure.input(z.object({ currentCode: z.string().trim().min(1).max(128), nextCode: z.string().trim().min(1).max(128) })).mutation(async ({ input }) => {
+        const changed = await changeTeamBoardAccessCode(input.currentCode, input.nextCode);
+        if (!changed) throw new TRPCError({ code: "FORBIDDEN", message: "Team Board access code ไม่ถูกต้อง" });
+        return { success: true } as const;
+      }),
     }),
   }),
   auth: router({

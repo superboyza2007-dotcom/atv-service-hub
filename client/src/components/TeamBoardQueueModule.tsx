@@ -15,8 +15,10 @@ const shifts = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00"];
 const DAILY_SECTION_SLOTS = ["08:00", "10:00", "13:00", "15:00"] as const;
 const durationOptions: Array<number | null> = [15, 30, 45, 60, null];
 const initialRows = shifts.slice(0, 3).map((shift, index) => ({ id: `row-${index + 1}`, shift, slot1: "", slot2: "" }));
+const DEFAULT_ACCESS_CODE = "123456";
 const SHADOW_DISPLAY_NAME = "";
 const isRegistrationRows = (value: unknown): value is RegistrationRow[] => Array.isArray(value) && value.every((row) => Boolean(row && typeof row === "object" && typeof (row as RegistrationRow).id === "string" && typeof (row as RegistrationRow).shift === "string" && typeof (row as RegistrationRow).slot1 === "string" && typeof (row as RegistrationRow).slot2 === "string"));
+const withoutAccessCode = (rows: RegistrationRow[], accessCode: string) => rows.map((row) => ({ ...row, slot1: row.slot1.trim() === accessCode ? "" : row.slot1, slot2: row.slot2.trim() === accessCode ? "" : row.slot2 }));
 const roleLabel: Record<BoardMember["role"], string> = { te: "Te -", floating: "ตัวลอย ^", wk: "Wk", dp: "Dp / _", ql: "QL", qf: "QF" };
 const formatClock = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 const teamLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -74,11 +76,11 @@ const activeIntegrityWarning = (state: QueueState, proposedActiveIds = state.act
   return null;
 };
 
-function buildBoard(rows: RegistrationRow[]): BoardMember[] {
+function buildBoard(rows: RegistrationRow[], accessCode: string): BoardMember[] {
   const members: BoardMember[] = [];
   let order = 1;
   rows.forEach((row, rowIndex) => {
-    const entries = [row.slot1.trim(), row.slot2.trim()].filter(Boolean).map((value, slot) => ({ value, slot, isShadow: false }));
+    const entries = [row.slot1.trim(), row.slot2.trim()].filter((value) => value && value !== accessCode).map((value, slot) => ({ value, slot, isShadow: false }));
     const present = entries.filter((entry) => entry.value);
     if (!present.length) return;
     const realEntries = present.filter((entry) => !entry.isShadow);
@@ -103,8 +105,6 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
   const [selected, setSelected] = useState<string[]>([]);
   const [duration, setDuration] = useState<number | null>(30);
   const [commandUnits, setCommandUnits] = useState("1");
-  // Access is controlled by the existing menu; no hidden access-code gate.
-  const secretUnlocked = true;
   const [mirrorMode, setMirrorMode] = useState(false);
   const [mirrorEventId, setMirrorEventId] = useState("mirror-001");
   const [queueReads, setQueueReads] = useState<string[]>([]);
@@ -112,10 +112,16 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
   const [queueWarning, setQueueWarning] = useState<string | null>(null);
   const [warningKey, setWarningKey] = useState<string | null>(null);
   const [replayIndex, setReplayIndex] = useState(0);
+  const [secretCode, setSecretCode] = useState(DEFAULT_ACCESS_CODE);
+  const [secretUnlocked, setSecretUnlocked] = useState(false);
+  const [changeCodeOpen, setChangeCodeOpen] = useState(false);
+  const [changeCodeError, setChangeCodeError] = useState("");
   const sharedQueueQuery = trpc.runQueue.get.useQuery(undefined, { retry: false, refetchInterval: 1000, enabled: true });
   const guideSessionsSourceQuery = trpc.operationsSnapshots.get.useQuery({ key: OPERATIONS_SNAPSHOT_KEYS.guideSessions }, { retry: false, refetchInterval: 1000 });
   const guideStateSourceQuery = trpc.operationsSnapshots.get.useQuery({ key: OPERATIONS_SNAPSHOT_KEYS.guideState }, { retry: false, refetchInterval: 1000 });
   const sharedQueueMutation = trpc.runQueue.save.useMutation({ onError: () => setQueueWarning("บันทึก Run Queue ลง Server ไม่สำเร็จ กรุณาลองใหม่") });
+  const accessUnlockMutation = trpc.runQueue.access.unlock.useMutation();
+  const accessChangeMutation = trpc.runQueue.access.change.useMutation();
   const sharedQueueHydrated = useRef(false);
   const lastPersistedAt = useRef(0);
   const rosterKey = rosterNames.map((name) => name.trim()).filter(Boolean).join("|");
@@ -127,11 +133,11 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
       version: 1,
       updatedAt: Date.now(),
       updatedBy: operatorName,
-      draftRows: rows,
+      draftRows: withoutAccessCode(rows, secretCode),
       ...(current ? { state: current } : {}),
     });
     sharedQueueMutation.mutate({ payload });
-  }, [rows, operatorName, readOnly]);
+  }, [rows, secretCode, operatorName, readOnly]);
   useEffect(() => {
     if (!sharedQueueQuery.isSuccess || sharedQueueHydrated.current) return;
     sharedQueueHydrated.current = true;
@@ -149,7 +155,7 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
     if (!engineState || !sharedQueueHydrated.current || readOnly) return;
     const updatedAt = Date.now();
     lastPersistedAt.current = updatedAt;
-    const payload = serializeOperationsSnapshot({ version: 1, updatedAt, updatedBy: operatorName, draftRows: rows, state: engineState });
+    const payload = serializeOperationsSnapshot({ version: 1, updatedAt, updatedBy: operatorName, draftRows: withoutAccessCode(rows, secretCode), state: engineState });
     sharedQueueMutation.mutate({ payload });
   }, [engineState, operatorName, readOnly]);
   useEffect(() => {
@@ -161,7 +167,7 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
       else row.slot2 = name;
       return rows;
     }, []);
-    const board = buildBoard(seededRows);
+    const board = buildBoard(seededRows, secretCode);
     if (board.length) {
       const next = createQueueState(board);
       engineRef.current = next;
@@ -171,7 +177,7 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
       setQueueReads((logs) => [`${new Date().toLocaleTimeString("th-TH")}  ATV_ROSTER_LINKED → เชื่อม ${board.length} รายชื่อจาก Daily Board`, ...logs].slice(0, 8));
     }
     seededRosterRef.current = rosterKey;
-  }, [rosterKey, rosterNames, sharedQueueQuery.isSuccess]);
+  }, [rosterKey, rosterNames, secretCode, sharedQueueQuery.isSuccess]);
   useEffect(() => {
     if (standbyNames === undefined || !sharedQueueHydrated.current || readOnly || !engineRef.current) return;
     if (!rosterNames.length && !standbyNames.length) return;
@@ -203,8 +209,16 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
     return () => window.clearInterval(timer);
   }, [duration]);
 
-  const submitBoard = () => {
-    const board = buildBoard(rows);
+  const submitBoard = async () => {
+    const unlockSubmitted = rows.some((row) => row.slot1.trim() === secretCode || row.slot2.trim() === secretCode);
+    if (unlockSubmitted) {
+      const verified = await accessUnlockMutation.mutateAsync({ code: secretCode });
+      if (!verified) {
+        setQueueReads(["ERROR: Team Board access code ไม่ถูกต้องบน Server"]);
+        return;
+      }
+    }
+    const board = buildBoard(rows, secretCode);
     if (!board.length) { setQueueReads(["ERROR: ต้องลงทะเบียนอย่างน้อย 1 รายชื่อก่อนส่ง/สำเร็จ"]); return; }
     const floatingMembers = board.filter((member) => !member.isShadow && member.role === "floating");
     if (floatingMembers.length > 1) {
@@ -227,7 +241,11 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
     engineRef.current = state;
     setEngineState(state);
     setSelected([]);
-    setRows(rows);
+    const nextUnlocked = unlockSubmitted ? !secretUnlocked : secretUnlocked;
+    if (unlockSubmitted) {
+      setSecretUnlocked(nextUnlocked);
+    }
+    setRows(withoutAccessCode(rows, secretCode));
     setScreen("dashboard");
     setQueueReads((logs) => [`${new Date().toLocaleTimeString("th-TH")}  DAILY_REGISTERED_GUIDES → อัปเดต ${board.length} รายชื่อโดยคงลำดับและ Active เดิม`, ...logs].slice(0, 8));
   };
@@ -235,6 +253,11 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
     setRows((current) => current.map((row) => {
       if (row.id !== id) return row;
       const next = { ...row, [field]: value };
+      if (next.slot1.trim() === secretCode && next.slot2.trim() === secretCode) {
+        setChangeCodeError("");
+        setChangeCodeOpen(true);
+        return { ...next, slot1: "", slot2: "" };
+      }
       return next;
     }));
   };
@@ -408,11 +431,11 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
     engineRef.current = result.state; setEngineState(result.state); setQueueReads((logs) => [`${new Date().toLocaleTimeString("th-TH")}  COMMAND_DISPATCH → ${plan.reason}`, ...logs].slice(0, 8));
   };
   const complete = (runId: string) => { if (!engineRef.current) return; const result = completeRun(engineRef.current, runId, Date.now()); if (!result.error) { engineRef.current = result.state; setEngineState(result.state); setQueueReads((logs) => [`${new Date().toLocaleTimeString("th-TH")}  COMPLETE → ${runId} returned according to lifecycle`, ...logs].slice(0, 8)); } };
-  const resetRunQueue = () => { const board = buildBoard(rows); const next = createQueueState(board); engineRef.current = next; setEngineState(next); setSelected([]); setQueueReads([`${new Date().toLocaleTimeString("th-TH")}  QUEUE_RESET → ล้างสถานะการรันและเริ่มคิวใหม่จากรายชื่อเดิม`]); };
+  const resetRunQueue = () => { const board = buildBoard(rows, secretCode); const next = createQueueState(board); engineRef.current = next; setEngineState(next); setSelected([]); setQueueReads([`${new Date().toLocaleTimeString("th-TH")}  QUEUE_RESET → ล้างสถานะการรันและเริ่มคิวใหม่จากรายชื่อเดิม`]); };
 
-  if (screen === "register") return <Registration operatorName={operatorName} rows={rows} updateRow={updateRow} addRow={addRow} onSubmit={submitBoard} onBack={() => setScreen("queue")} hasSubmitted={Boolean(state)} options={memberOptions} />;
+  if (screen === "register") return <Registration operatorName={operatorName} rows={rows} updateRow={updateRow} addRow={addRow} onSubmit={submitBoard} onBack={() => setScreen("queue")} hasSubmitted={Boolean(state)} options={memberOptions} secretCode={secretCode} secretUnlocked={secretUnlocked} changeCodeOpen={changeCodeOpen} changeCodeError={changeCodeError} onCloseChangeCode={() => setChangeCodeOpen(false)} onChangeCode={async (oldCode, nextCode, confirmCode) => { if (!nextCode || nextCode !== confirmCode) return setChangeCodeError("รหัสใหม่สองช่องต้องตรงกันและห้ามว่าง"); try { await accessChangeMutation.mutateAsync({ currentCode: oldCode, nextCode }); setSecretCode(nextCode); setChangeCodeOpen(false); setChangeCodeError(""); setQueueReads((logs) => [`${new Date().toLocaleTimeString("th-TH")}  ACCESS_CODE_CHANGED → เปลี่ยนรหัสสำเร็จบน Server`, ...logs].slice(0, 8)); } catch { setChangeCodeError("รหัสเดิมไม่ถูกต้องหรือเชื่อมต่อ Server ไม่สำเร็จ"); } }} />;
   if (!state) return null;
-  if (screen === "queue") return <QueueDisplayBoard operatorName={operatorName} members={members} state={visibleQueueState ?? state} onNavigate={setScreen} />;
+  if (screen === "queue") return secretUnlocked ? <QueueDisplayBoard operatorName={operatorName} members={members} state={visibleQueueState ?? state} onNavigate={setScreen} /> : <QueueBoard members={members} state={state} onNavigate={setScreen} />;
   if (screen === "events") return <div className="app-shell"><aside className="sidebar"><div className="brand"><div className="brand-mark" aria-label="queue slot mark"><span>[[</span><i /><span>]]</span></div><div><strong>team board</strong><span>engine event ledger</span></div></div><div className="sidebar-kicker">STEP 03 / EVENT LOG</div><nav className="nav-list"><button className="nav-item" onClick={() => setScreen("dashboard")}><Activity size={17} />Dashboard<span className="nav-count">05</span></button><button className="nav-item" onClick={() => setScreen("queue")}><ListFilter size={17} />{secretUnlocked ? "กระดาน Active" : "คิวตั้งต้น"}<span className="nav-count">{state.standby.length}</span></button><button className="nav-item" onClick={() => openRegistration()}><UsersRound size={17} />แก้คิวตั้งต้น<span className="nav-count">{members.length}</span></button><button className="nav-item active" onClick={() => setScreen("events")}><Clock3 size={17} />Event log<span className="nav-count">{state.events.length}</span></button></nav><div className="sidebar-bottom"><div className="system-status"><span className="pulse-dot" />Engine event ledger<span>engine v1</span></div><div className="side-note"><LockKeyhole size={15} />ตรวจ transition แบบ step-by-step</div></div></aside><main className="main-canvas event-page"><header className="topbar"><div><div className="eyebrow"><span className="live-dot" />ENGINE EVENT LEDGER</div><h1>ลำดับเหตุการณ์ของ Engine</h1><p>เลือกแต่ละ transition เพื่อ audit การเปลี่ยนสถานะและลำดับคิว</p></div><div className="header-actions"><button className="clear-button" onClick={() => setScreen("dashboard")}>กลับ Dashboard</button></div></header><EventLog events={state.events} replayIndex={replayIndex} onReplay={setReplayIndex} /></main></div>;
 
   const standbyCard = selectStandbyCardItems(visibleQueueState ?? state);
@@ -441,8 +464,11 @@ function EventLog({ events, replayIndex, onReplay }: { events: QueueEvent[]; rep
   </>;
 }
 
-function Registration({ operatorName, rows, updateRow, addRow, onSubmit, onBack, hasSubmitted, options }: { operatorName: string; rows: RegistrationRow[]; updateRow: (id: string, field: "slot1" | "slot2", value: string) => void; addRow: () => void; onSubmit: () => void | Promise<void>; onBack: () => void; hasSubmitted: boolean; options: QueueMemberOption[] | string[] }) {
+function Registration({ operatorName, rows, updateRow, addRow, onSubmit, onBack, hasSubmitted, options, secretCode, secretUnlocked, changeCodeOpen, changeCodeError, onCloseChangeCode, onChangeCode }: { operatorName: string; rows: RegistrationRow[]; updateRow: (id: string, field: "slot1" | "slot2", value: string) => void; addRow: () => void; onSubmit: () => void | Promise<void>; onBack: () => void; hasSubmitted: boolean; options: QueueMemberOption[] | string[]; secretCode: string; secretUnlocked: boolean; changeCodeOpen: boolean; changeCodeError: string; onCloseChangeCode: () => void; onChangeCode: (oldCode: string, nextCode: string, confirmCode: string) => void }) {
   const [clockNow, setClockNow] = useState(() => new Date());
+  const [oldCode, setOldCode] = useState("");
+  const [nextCode, setNextCode] = useState("");
+  const [confirmCode, setConfirmCode] = useState("");
   const [customNameFields, setCustomNameFields] = useState<Record<string, boolean>>({});
   const visibleRows = rows;
   useEffect(() => { const timer = window.setInterval(() => setClockNow(new Date()), 1000); return () => window.clearInterval(timer); }, []);
@@ -491,7 +517,12 @@ function Registration({ operatorName, rows, updateRow, addRow, onSubmit, onBack,
         </section>
       </section>
     </main>
+    {changeCodeOpen && <ChangeCodeDialog oldCode={oldCode} nextCode={nextCode} confirmCode={confirmCode} error={changeCodeError} onOldCode={setOldCode} onNextCode={setNextCode} onConfirmCode={setConfirmCode} onClose={onCloseChangeCode} onConfirm={() => onChangeCode(oldCode, nextCode, confirmCode)} />}
   </div>;
+}
+
+function ChangeCodeDialog({ oldCode, nextCode, confirmCode, error, onOldCode, onNextCode, onConfirmCode, onClose, onConfirm }: { oldCode: string; nextCode: string; confirmCode: string; error: string; onOldCode: (value: string) => void; onNextCode: (value: string) => void; onConfirmCode: (value: string) => void; onClose: () => void; onConfirm: () => void }) {
+  return <div className="dialog-backdrop" role="presentation"><section className="access-dialog" role="dialog" aria-modal="true" aria-labelledby="change-code-title"><div className="panel-heading"><div><div className="section-index">ACCESS CONTROL</div><h2 id="change-code-title">เปลี่ยนรหัสลับ</h2></div><button className="icon-button" onClick={onClose} aria-label="ปิด"><X size={17} /></button></div><label className="access-field">ยืนยันรหัสเดิม<input type="password" inputMode="numeric" autoComplete="current-password" value={oldCode} onChange={(event) => onOldCode(event.target.value)} autoFocus /></label><label className="access-field">รหัสใหม่<input type="password" inputMode="numeric" autoComplete="new-password" value={nextCode} onChange={(event) => onNextCode(event.target.value)} /></label><label className="access-field">ยืนยันรหัสใหม่<input type="password" inputMode="numeric" autoComplete="new-password" value={confirmCode} onChange={(event) => onConfirmCode(event.target.value)} /></label>{error && <p className="access-error" role="alert">{error}</p>}<div className="dialog-actions"><button className="clear-button" onClick={onClose}>ยกเลิก</button><button className="dispatch-button" onClick={onConfirm}>ยืนยันการเปลี่ยนรหัส</button></div></section></div>;
 }
 
 function SourceActiveCard({ group, members }: { group: ActiveSessionNameGroup; members: BoardMember[] }) {
