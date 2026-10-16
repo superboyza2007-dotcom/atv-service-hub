@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import "./FutureDiceMiniPopup.css";
 
@@ -38,6 +38,9 @@ export default function FutureDiceGame() {
   const [dismissedSessionId, setDismissedSessionId] = useState<number | null>(null);
   const [latestSession, setLatestSession] = useState<unknown>(null);
   const [rollingSlot, setRollingSlot] = useState<Slot | null>(null);
+  const [remoteRollingUntil, setRemoteRollingUntil] = useState<Partial<Record<Slot, number>>>({});
+  const seenRollKeysRef = useRef(new Set<string>());
+  const observedSessionRef = useRef<number | null>(null);
   const [error, setError] = useState("");
   const [now, setNow] = useState(() => Date.now());
 
@@ -65,7 +68,7 @@ export default function FutureDiceGame() {
   const sessionQuery = trpc.futureDice.get.useQuery({ sessionId: activeSessionId ?? 0 }, {
     enabled: isOpen && activeSessionId != null,
     retry: false,
-    refetchInterval: isOpen && activeSessionId != null ? 500 : false,
+    refetchInterval: isOpen && activeSessionId != null ? 250 : false,
     refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
   });
@@ -78,7 +81,7 @@ export default function FutureDiceGame() {
 
   useEffect(() => {
     if (!isOpen) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    const timer = window.setInterval(() => setNow(Date.now()), 100);
     return () => window.clearInterval(timer);
   }, [isOpen]);
 
@@ -87,6 +90,28 @@ export default function FutureDiceGame() {
   const activeSession = activeSessionId != null
     ? sessionQuery.data ?? ((latestSession as (typeof sessions)[number] | null)?.id === activeSessionId ? latestSession as (typeof sessions)[number] : null) ?? sessions.find(session => session.id === activeSessionId) ?? null
     : openSession ?? awaitingChoiceSession ?? recentResultSession ?? null;
+
+  useEffect(() => {
+    if (!activeSession) return;
+    if (observedSessionRef.current !== activeSession.id) {
+      observedSessionRef.current = activeSession.id;
+      seenRollKeysRef.current = new Set(activeSession.players.flatMap(player => player.rolls.map(roll => `${player.id}:${roll.round}:${roll.rolledAt}`)));
+      setRemoteRollingUntil({});
+      return;
+    }
+    const freshRolls = activeSession.players.flatMap(player => player.rolls.map(roll => ({ player, roll, key: `${player.id}:${roll.round}:${roll.rolledAt}` }))).filter(item => !seenRollKeysRef.current.has(item.key));
+    if (!freshRolls.length) return;
+    const nowAtClient = Date.now();
+    setRemoteRollingUntil(current => {
+      const next = { ...current };
+      freshRolls.forEach(({ player, roll, key }) => {
+        const serverStartedAt = sessionTime(roll.rolledAt);
+        next[player.slot] = Math.max(serverStartedAt + 1_350, nowAtClient + 250);
+        seenRollKeysRef.current.add(key);
+      });
+      return next;
+    });
+  }, [activeSession?.id, activeSession?.updatedAt]);
 
   const invitationSessionId = invitationQuery.data?.sessionId;
   useEffect(() => {
@@ -222,10 +247,15 @@ export default function FutureDiceGame() {
     }
   };
 
-  const selectResult = (result: string) => {
+  const selectResult = async (result: string) => {
     if (!activeSession || !canChoose || isBusy) return;
     setError("");
-    chooseMutation.mutate({ sessionId: activeSession.id, selectedOutcome: result });
+    try {
+      await chooseMutation.mutateAsync({ sessionId: activeSession.id, selectedOutcome: result });
+      closePopup();
+    } catch {
+      // The mutation hook supplies the server's message.
+    }
   };
 
   const chooseView = () => <div className="body">
@@ -273,7 +303,7 @@ export default function FutureDiceGame() {
       <div className="table">{(["A", "B"] as const).map(team => <div className={`side ${team === "B" ? "b" : ""}`} key={team}><div className="side-head">{gameMode === "1v1" ? (team === "A" ? "ผู้เล่น A" : "ผู้เล่น B") : `ทีม ${team}`}</div>{activeSession.players.filter(player => player.team === team).map(player => {
         const rollResult = player.rolls.find(rollItem => rollItem.round === activeSession.currentRound);
         const isActive = target?.id === player.id && activeSession.status === "open";
-        const isRolling = rollingSlot === player.slot;
+        const isRolling = rollingSlot === player.slot || (remoteRollingUntil[player.slot] ?? 0) > now;
         const shownRoll = isRolling ? undefined : rollResult;
         const history = player.rolls.filter(rollItem => rollItem.round < activeSession.currentRound).map(rollItem => `รอบ ${rollItem.round}: ${rollItem.dieOne}+${rollItem.dieTwo}`).join(" · ");
         return <div className={`player ${isActive ? "active" : ""}`} key={player.id}><div className="p-top"><span className="p-name">{player.name}</span><span className={`p-status ${shownRoll ? "done" : ""}`}>{shownRoll ? "ทอยแล้ว" : isActive ? "ถึงตา" : "รอการทอย"}</span></div><div className="dice-row">{dieFace(shownRoll?.dieOne, isRolling)}{dieFace(shownRoll?.dieTwo, isRolling)}{shownRoll && <span className="total">รวม {shownRoll.total}</span>}</div>{shownRoll && shownRoll.rolledByName !== player.name && <span className="sub">{shownRoll.rolledByName} ทอยแทน {player.name}</span>}{history && <span className="player-history">{history}</span>}</div>;
