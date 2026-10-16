@@ -2,7 +2,7 @@ import { and, desc, eq, gte, notInArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { AppDirectoryUser, InsertAppDirectoryUser, InsertUser, appDirectoryPresence, appDirectoryUsers, appLiveMessages, appOperationalHistory, appOperationsSnapshots, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
-import { directoryCredentialFields, hashDirectoryCode, hashMatches } from './appDirectoryAuth';
+import { directoryCredentialFields, hashDirectoryCode } from './appDirectoryAuth';
 import { APP_DIRECTORY_ONLINE_WINDOW_MS } from "./appDirectoryPresence";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -211,34 +211,6 @@ export async function getAppOperationsSnapshot(snapshotKey: string): Promise<str
   if (!db) throw new Error("Database is not available");
   const rows = await db.select({ payload: appOperationsSnapshots.payload }).from(appOperationsSnapshots).where(eq(appOperationsSnapshots.snapshotKey, snapshotKey)).limit(1);
   return rows[0]?.payload;
-}
-
-const TEAM_BOARD_ACCESS_SNAPSHOT_KEY = "atv-team-board-access-v1";
-const DEFAULT_TEAM_BOARD_ACCESS_CODE = "123456";
-
-type TeamBoardAccessRecord = { hash: string; salt: string };
-
-async function getTeamBoardAccessRecord(): Promise<TeamBoardAccessRecord> {
-  const current = parseSnapshotRecord(await getAppOperationsSnapshot(TEAM_BOARD_ACCESS_SNAPSHOT_KEY));
-  if (typeof current.hash === "string" && typeof current.salt === "string") {
-    return { hash: current.hash, salt: current.salt };
-  }
-  const initial = hashDirectoryCode(DEFAULT_TEAM_BOARD_ACCESS_CODE);
-  await upsertAppOperationsSnapshot(TEAM_BOARD_ACCESS_SNAPSHOT_KEY, JSON.stringify(initial));
-  return initial;
-}
-
-export async function verifyTeamBoardAccessCode(rawCode: string): Promise<boolean> {
-  const record = await getTeamBoardAccessRecord();
-  return hashMatches(rawCode, record.hash, record.salt);
-}
-
-export async function changeTeamBoardAccessCode(currentCode: string, nextCode: string): Promise<boolean> {
-  const record = await getTeamBoardAccessRecord();
-  if (!hashMatches(currentCode, record.hash, record.salt)) return false;
-  const next = hashDirectoryCode(nextCode);
-  await upsertAppOperationsSnapshot(TEAM_BOARD_ACCESS_SNAPSHOT_KEY, JSON.stringify(next));
-  return true;
 }
 
 export async function upsertAppOperationsSnapshot(snapshotKey: string, payload: string): Promise<void> {

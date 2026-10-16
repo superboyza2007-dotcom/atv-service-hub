@@ -1,3 +1,7 @@
+/*
+ * LOCKED QUEUE CONTRACT — ห้ามแก้ไขกฎ Run Queue หรือลำดับ Standby เด็ดขาด
+ * รายละเอียดข้อกำหนดอยู่ที่ QUEUE_RULES_LOCK.md; UI/access changes ต้องไม่เปลี่ยน engine นี้
+ */
 /* Mission Control Ledger engine: deterministic state transitions, explicit queue reasons, no risk inference. */
 
 export type Role = "te" | "floating" | "wk" | "dp" | "ql" | "qf";
