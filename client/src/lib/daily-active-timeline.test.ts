@@ -29,14 +29,22 @@ describe("buildDailyActiveTimeline", () => {
     expect(grouped["15:00"].map(session => session.id)).toEqual(["fifteen"]);
   });
 
-  it("uses Bangkok dates at midnight even when the browser's date is still the previous UTC day", () => {
+  it("uses the Bangkok operational date even when the browser's date is still the previous UTC day", () => {
     const sessions = [
       { id: "after-midnight-bangkok", startedAt: "2026-08-24T17:30:00.000Z" },
       { id: "previous-bangkok-day", startedAt: "2026-08-24T16:30:00.000Z" },
     ];
     const selectedDay = new Date("2026-08-24T18:00:00.000Z");
 
-    expect(buildDailyActiveTimeline(sessions, selectedDay).map(session => session.id)).toEqual(["after-midnight-bangkok"]);
+    expect(buildDailyActiveTimeline(sessions, selectedDay).map(session => session.id)).toEqual(["previous-bangkok-day", "after-midnight-bangkok"]);
     expect(groupDailyActiveTimelineBySlot(sessions, selectedDay)["08:00"].map(session => session.id)).toEqual(["after-midnight-bangkok"]);
+  });
+  it("starts a new operational day at 07:00 Bangkok time", () => {
+    const sessions = [
+      { id: "before-seven", startedAt: "2026-08-25T06:59:00+07:00" },
+      { id: "at-seven", startedAt: "2026-08-25T07:00:00+07:00" },
+    ];
+    expect(buildDailyActiveTimeline(sessions, new Date("2026-08-25T06:59:30+07:00")).map(session => session.id)).toEqual(["before-seven"]);
+    expect(buildDailyActiveTimeline(sessions, new Date("2026-08-25T07:00:00+07:00")).map(session => session.id)).toEqual(["at-seven"]);
   });
 });
