@@ -23,7 +23,7 @@ import {
 } from "./vehicleFlowService";
 import { completeNextActiveQueue, reconcileActiveQueue } from "./activeQueueMirror";
 import { isRepairLogSheetConfigured, repairLogPayloadSchema, submitRepairLogSheetPayload } from "./repairLogGoogleSheets";
-import { cancelFutureDiceSession, chooseFutureDiceOutcome, createFutureDiceSession, isFutureDiceRuleError, listFutureDiceSessions, rollFutureDice, setFutureDiceOutcomeType, type FutureDiceActor } from "./futureDiceService";
+import { cancelFutureDiceSession, chooseFutureDiceOutcome, createFutureDiceSession, getFutureDiceInvitationForUser, getFutureDiceSession, isFutureDiceRuleError, listFutureDiceSessions, rollFutureDice, setFutureDiceOutcomeType, type FutureDiceActor } from "./futureDiceService";
 
 const vehicleActor = (user: { id: number; role: "user" | "guide" | "mechanic" | "supervisor" | "admin" }) => ({
   id: user.id,
@@ -150,6 +150,14 @@ export const appRouter = router({
     }),
   }),
   futureDice: router({
+    invitation: appProtectedProcedure.query(async ({ ctx }) => {
+      if (!ctx.appUser) return null;
+      try {
+        return await getFutureDiceInvitationForUser(ctx.appUser.id);
+      } catch (error) {
+        return throwFutureDiceError(error);
+      }
+    }),
     roster: appProtectedProcedure.query(async () => {
       const [directoryUsers, onlineUserIds] = await Promise.all([listAppDirectoryUsers(), getOnlineAppDirectoryUserIds()]);
       return directoryUsers.map(user => ({ id: user.id, name: user.name, group: user.userGroup, isOnline: onlineUserIds.has(Number(user.id)) }));
@@ -157,6 +165,15 @@ export const appRouter = router({
     list: appProtectedProcedure.input(z.object({ limit: z.number().int().min(1).max(30).optional() }).optional()).query(async ({ input }) => {
       try {
         return await listFutureDiceSessions(input?.limit ?? 12);
+      } catch (error) {
+        return throwFutureDiceError(error);
+      }
+    }),
+    get: appProtectedProcedure.input(z.object({ sessionId: z.number().int().positive() })).query(async ({ input }) => {
+      try {
+        const session = await getFutureDiceSession(input.sessionId);
+        if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "ไม่พบเกมที่เลือก" });
+        return session;
       } catch (error) {
         return throwFutureDiceError(error);
       }

@@ -171,6 +171,25 @@ export async function getFutureDiceSession(sessionId: number): Promise<FutureDic
   return readFutureDiceSession(db, sessionId);
 }
 
+export async function getFutureDiceInvitationForUser(directoryUserId: number): Promise<{ sessionId: number } | null> {
+  const db = requireDatabase(await getDb());
+  const eligible = or(
+    eq(futureDiceSessions.status, "open"),
+    and(
+      eq(futureDiceSessions.status, "completed"),
+      isNull(futureDiceSessions.selectedOutcome),
+      isNotNull(futureDiceSessions.winningTeam),
+    ),
+  );
+  const rows = await db.select({ sessionId: futureDiceSessions.id })
+    .from(futureDicePlayers)
+    .innerJoin(futureDiceSessions, eq(futureDicePlayers.sessionId, futureDiceSessions.id))
+    .where(and(eq(futureDicePlayers.directoryUserId, directoryUserId), eligible))
+    .orderBy(desc(futureDiceSessions.updatedAt), desc(futureDiceSessions.id))
+    .limit(1);
+  return rows[0] ? { sessionId: rows[0].sessionId } : null;
+}
+
 export async function listFutureDiceSessions(limit = 12): Promise<FutureDiceSessionView[]> {
   const db = requireDatabase(await getDb());
   const sessions = await db.select().from(futureDiceSessions)

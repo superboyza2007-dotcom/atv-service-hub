@@ -22,6 +22,11 @@ function slotTeam(slot: Slot): Team { return slot.startsWith("A") ? "A" : "B"; }
 function selectedSlotCount(mode: Mode) { return mode === "1v1" ? 1 : 2; }
 function sessionTime(value: Date | string) { return new Date(value).getTime(); }
 
+export const FUTURE_DICE_OPEN_EVENT = "future-dice:open";
+export function openFutureDiceApp() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(FUTURE_DICE_OPEN_EVENT));
+}
+
 export default function FutureDiceGame() {
   const utils = trpc.useUtils();
   const [isOpen, setIsOpen] = useState(false);
@@ -30,14 +35,40 @@ export default function FutureDiceGame() {
   const [choice, setChoice] = useState<Choice | null>(null);
   const [selectedPlayers, setSelectedPlayers] = useState<Partial<Record<Slot, number>>>({});
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
+  const [dismissedSessionId, setDismissedSessionId] = useState<number | null>(null);
   const [latestSession, setLatestSession] = useState<unknown>(null);
   const [rollingSlot, setRollingSlot] = useState<Slot | null>(null);
   const [error, setError] = useState("");
   const [now, setNow] = useState(() => Date.now());
 
+  useEffect(() => {
+    const onOpen = () => { setError(""); setPhase("choose"); setIsOpen(true); };
+    window.addEventListener(FUTURE_DICE_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(FUTURE_DICE_OPEN_EVENT, onOpen);
+  }, []);
+
+  const invitationQuery = trpc.futureDice.invitation.useQuery(undefined, {
+    retry: false,
+    refetchInterval: isOpen ? false : 1_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+  });
   const identityQuery = trpc.directory.me.useQuery(undefined, { enabled: isOpen, retry: false, refetchOnWindowFocus: true });
-  const rosterQuery = trpc.futureDice.roster.useQuery(undefined, { enabled: isOpen, retry: false, refetchInterval: 5_000, refetchOnWindowFocus: true });
-  const sessionsQuery = trpc.futureDice.list.useQuery({ limit: 30 }, { enabled: isOpen, retry: false, refetchInterval: 1_000, refetchOnWindowFocus: true });
+  const rosterQuery = trpc.futureDice.roster.useQuery(undefined, { enabled: isOpen, retry: false, refetchInterval: 5_000, refetchIntervalInBackground: true, refetchOnWindowFocus: true });
+  const sessionsQuery = trpc.futureDice.list.useQuery({ limit: 30 }, {
+    enabled: isOpen && activeSessionId == null,
+    retry: false,
+    refetchInterval: isOpen && activeSessionId == null ? 1_000 : false,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+  });
+  const sessionQuery = trpc.futureDice.get.useQuery({ sessionId: activeSessionId ?? 0 }, {
+    enabled: isOpen && activeSessionId != null,
+    retry: false,
+    refetchInterval: isOpen && activeSessionId != null ? 500 : false,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+  });
   const sessions = sessionsQuery.data ?? [];
   const roster = rosterQuery.data ?? [];
   const currentUserId = identityQuery.data && "id" in identityQuery.data ? identityQuery.data.id : undefined;
@@ -46,15 +77,26 @@ export default function FutureDiceGame() {
   const awaitingChoiceSession = sessions.find(session => session.status === "completed" && session.winningTeam != null && !session.selectedOutcome);
 
   useEffect(() => {
+    if (!isOpen) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [isOpen]);
 
   const recentResultSession = sessions.find(session => session.selectedOutcome && now - sessionTime(session.updatedAt) >= 0 && now - sessionTime(session.updatedAt) < 10_000);
   const selectedMode = mode ?? "1v1";
   const activeSession = activeSessionId != null
-    ? ((latestSession as (typeof sessions)[number] | null)?.id === activeSessionId ? latestSession as (typeof sessions)[number] : null) ?? sessions.find(session => session.id === activeSessionId) ?? null
+    ? sessionQuery.data ?? ((latestSession as (typeof sessions)[number] | null)?.id === activeSessionId ? latestSession as (typeof sessions)[number] : null) ?? sessions.find(session => session.id === activeSessionId) ?? null
     : openSession ?? awaitingChoiceSession ?? recentResultSession ?? null;
+
+  const invitationSessionId = invitationQuery.data?.sessionId;
+  useEffect(() => {
+    if (!invitationSessionId || isOpen || invitationSessionId === dismissedSessionId) return;
+    setActiveSessionId(invitationSessionId);
+    setLatestSession(null);
+    setPhase("game");
+    setError("");
+    setIsOpen(true);
+  }, [invitationSessionId, isOpen, dismissedSessionId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -70,8 +112,12 @@ export default function FutureDiceGame() {
 
   useEffect(() => {
     if (!isOpen || !activeSession?.selectedOutcome) return;
-    const remainingMs = Math.max(0, 10_000 - (Date.now() - sessionTime(activeSession.updatedAt)));
+    const ageMs = Date.now() - sessionTime(activeSession.updatedAt);
+    const remainingMs = Math.max(3_000, 8_000 - ageMs);
+    const sessionId = activeSession.id;
     const timer = window.setTimeout(() => {
+      setDismissedSessionId(sessionId);
+      setIsOpen(false);
       setActiveSessionId(null);
       setLatestSession(null);
       setSelectedPlayers({});
@@ -88,11 +134,11 @@ export default function FutureDiceGame() {
     onError: cause => setError(errorMessage(cause)),
   });
   const rollMutation = trpc.futureDice.roll.useMutation({
-    onSuccess: session => { setLatestSession(session); setActiveSessionId(session.id); void utils.futureDice.list.invalidate(); },
+    onSuccess: session => { setLatestSession(session); setActiveSessionId(session.id); void utils.futureDice.get.invalidate({ sessionId: session.id }); void utils.futureDice.list.invalidate(); },
     onError: cause => setError(errorMessage(cause)),
   });
   const chooseMutation = trpc.futureDice.chooseOutcome.useMutation({
-    onSuccess: session => { setLatestSession(session); setActiveSessionId(session.id); void utils.futureDice.list.invalidate(); },
+    onSuccess: session => { setLatestSession(session); setActiveSessionId(session.id); void utils.futureDice.get.invalidate({ sessionId: session.id }); void utils.futureDice.list.invalidate(); },
     onError: cause => setError(errorMessage(cause)),
   });
 
@@ -115,6 +161,7 @@ export default function FutureDiceGame() {
   const wasTiebreak = Boolean(activeSession && activeSession.currentRound > 1 && previousRoundRolls.length === expectedSlotCount && previousRoundScore.A === previousRoundScore.B);
 
   const closePopup = () => {
+    setDismissedSessionId(activeSessionId);
     setIsOpen(false);
     setActiveSessionId(null);
     setLatestSession(null);
@@ -240,8 +287,8 @@ export default function FutureDiceGame() {
   };
 
   const currentRole = activeSession ? actorPlayer ? "ผู้เล่น" : "ผู้ชม" : "ผู้สร้าง / ผู้ชม";
+  if (!isOpen) return null;
   return <div id="future-dice-mini-root">
-    <section className="future-dice-mini-launcher" aria-label="มินิแอปทอยลูกเต๋า"><div><p>MINI GAME</p><strong>ทอยลูกเต๋า · 1vs1 / 2vs2</strong></div><button type="button" onClick={() => { setIsOpen(true); setPhase("choose"); setError(""); }}>เปิดมินิแอป</button></section>
-    {isOpen && <div className="future-dice-mini-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) closePopup(); }}><div className="app-shell"><section className="mini" role="dialog" aria-modal="true" aria-label="มินิแอปทอยลูกเต๋า"><header className="top"><b className="logo">ทอย</b><small>เครื่องมือสุ่มผล</small><button type="button" className="close" onClick={closePopup} aria-label="ปิด">×</button></header>{phase === "choose" ? chooseView() : phase === "players" ? playersView() : gameView()}<footer className="footer">{currentUserName} · {currentRole}</footer></section></div></div>}
+    <div className="future-dice-mini-overlay"><div className="app-shell"><section className="mini" role="dialog" aria-modal="true" aria-label="แอปทอยลูกเต๋าเต็มหน้าจอ"><header className="top"><b className="logo">ทอย</b><small>ทอยลูกเต๋า · 1vs1 / 2vs2</small><button type="button" className="close" onClick={closePopup} aria-label="ปิดและกลับหน้าก่อนหน้า">×</button></header>{phase === "choose" ? chooseView() : phase === "players" ? playersView() : gameView()}<footer className="footer">{currentUserName} · {currentRole}</footer></section></div></div>
   </div>;
 }

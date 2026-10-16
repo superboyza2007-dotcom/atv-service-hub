@@ -9,6 +9,7 @@ import GuideModule3 from "./pages/GuideModule3";
 import MechanicModule from "./pages/MechanicModule";
 import SupervisorModule from "./pages/SupervisorModule";
 import FutureDiceResultToast from "./components/FutureDiceResultToast";
+import FutureDiceGame from "./components/FutureDiceGame";
 import { PttRoomProvider } from "./components/PttRoom";
 import AppAccessGate from "./components/AppAccessGate";
 import type { AppModule } from "@/lib/app-access";
@@ -25,6 +26,7 @@ export default function App() {
         <AppAccessGate requestedModule={requestedModule}>
           <PttRoomProvider>
             <FutureDiceResultToast />
+            <FutureDiceGame />
             {isMechanicModule ? <MechanicModule /> : isSupervisorModule ? <SupervisorModule /> : <GuideModule3 />}
           </PttRoomProvider>
         </AppAccessGate>
