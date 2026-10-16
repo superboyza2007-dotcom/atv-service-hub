@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME } from "@shared/const";
-import { appendAppOperationsSnapshotItem, appendLiveMessage, appendOperationalHistory, clearLiveMessages, getAppOperationsSnapshot, listLiveMessages, listAppDirectoryUsers, listOperationalHistory, mergeAppOperationsSnapshot, replaceAppDirectoryUsers, setAppDirectoryCodeHash, upsertAppOperationsSnapshot, verifyTeamBoardAccessCode, changeTeamBoardAccessCode } from "./db";
+import { appendAppOperationsSnapshotItem, appendLiveMessage, appendOperationalHistory, clearLiveMessages, getAppOperationsSnapshot, getOnlineAppDirectoryUserIds, listLiveMessages, listAppDirectoryUsers, listOperationalHistory, mergeAppOperationsSnapshot, replaceAppDirectoryUsers, setAppDirectoryCodeHash, touchAppDirectoryPresence, upsertAppOperationsSnapshot, verifyTeamBoardAccessCode, changeTeamBoardAccessCode } from "./db";
 import { appDirectorySessionCookieOptions, createDirectorySession, createSpecialDirectorySession, hashDirectoryCode, verifyDirectoryCode, verifySpecialAccessCode, APP_DIRECTORY_SESSION_COOKIE } from "./appDirectoryAuth";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -23,6 +23,7 @@ import {
 } from "./vehicleFlowService";
 import { completeNextActiveQueue, reconcileActiveQueue } from "./activeQueueMirror";
 import { isRepairLogSheetConfigured, repairLogPayloadSchema, submitRepairLogSheetPayload } from "./repairLogGoogleSheets";
+import { cancelFutureDiceSession, chooseFutureDiceOutcome, createFutureDiceSession, isFutureDiceRuleError, listFutureDiceSessions, rollFutureDice, setFutureDiceOutcomeType, type FutureDiceActor } from "./futureDiceService";
 
 const vehicleActor = (user: { id: number; role: "user" | "guide" | "mechanic" | "supervisor" | "admin" }) => ({
   id: user.id,
@@ -48,6 +49,46 @@ function actorFromContext(ctx: TrpcContext) {
   throw new TRPCError({ code: "UNAUTHORIZED", message: "App session required" });
 }
 
+function futureDiceActorFromContext(ctx: TrpcContext): FutureDiceActor {
+  const group = ctx.appUser?.userGroup ?? "";
+  const isSupervisor = ctx.appSpecialAccess || ctx.user?.role === "admin" || ctx.user?.role === "supervisor" || group.includes("หัวหน้า");
+  return {
+    directoryUserId: ctx.appUser?.id,
+    name: ctx.appUser?.name ?? ctx.user?.name ?? "ผู้ควบคุมเกม",
+    isSupervisor,
+  };
+}
+
+function futureDiceMessageModule(ctx: TrpcContext): "guide" | "mechanic" | "supervisor" {
+  const group = ctx.appUser?.userGroup ?? "";
+  if (ctx.appSpecialAccess || ctx.user?.role === "admin" || ctx.user?.role === "supervisor" || group.includes("หัวหน้า")) return "supervisor";
+  if (group.includes("ช่าง")) return "mechanic";
+  return "guide";
+}
+
+async function announceFutureDice(ctx: TrpcContext, body: string) {
+  try {
+    await appendLiveMessage({
+      channelType: "room",
+      channelId: "future-dice",
+      senderDirectoryUserId: ctx.appUser?.id,
+      senderModule: futureDiceMessageModule(ctx),
+      senderName: ctx.appUser?.name ?? ctx.user?.name ?? "ระบบ Future Dice",
+      body,
+    });
+  } catch (error) {
+    // A committed game transition remains valid even when an auxiliary announcement is unavailable.
+    console.warn("[FutureDice] Could not append live announcement", error);
+  }
+}
+
+function throwFutureDiceError(error: unknown): never {
+  if (isFutureDiceRuleError(error)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+  }
+  throw error;
+}
+
 export const appRouter = router({
   system: systemRouter,
   directory: router({
@@ -70,6 +111,11 @@ export const appRouter = router({
       return { id: user.id, name: user.name, group: user.userGroup };
     }),
     me: publicProcedure.query(({ ctx }) => ctx.appSpecialAccess ? { name: SPECIAL_ACCESS_NAME, group: SPECIAL_ACCESS_GROUP, special: true as const } : ctx.appUser ? { id: ctx.appUser.id, name: ctx.appUser.name, group: ctx.appUser.userGroup, special: false as const } : null),
+    heartbeat: appProtectedProcedure.mutation(async ({ ctx }) => {
+      if (!ctx.appUser) return { tracked: false } as const;
+      await touchAppDirectoryPresence(ctx.appUser.id);
+      return { tracked: true } as const;
+    }),
     verifyCurrentCode: appProtectedProcedure.input(z.object({ code: z.string().trim().min(1).max(128) })).mutation(({ ctx, input }) => {
       if (ctx.appSpecialAccess) return verifySpecialAccessCode(input.code);
       return ctx.appUser ? verifyDirectoryCode(input.code, ctx.appUser) : false;
@@ -100,6 +146,73 @@ export const appRouter = router({
       } catch (error) {
         console.error("[RepairLog] Server-side Google Sheets submission failed");
         throw new TRPCError({ code: "BAD_GATEWAY", message: "Google Sheets could not confirm the repair-log export" });
+      }
+    }),
+  }),
+  futureDice: router({
+    roster: appProtectedProcedure.query(async () => {
+      const [directoryUsers, onlineUserIds] = await Promise.all([listAppDirectoryUsers(), getOnlineAppDirectoryUserIds()]);
+      return directoryUsers.map(user => ({ id: user.id, name: user.name, group: user.userGroup, isOnline: onlineUserIds.has(Number(user.id)) }));
+    }),
+    list: appProtectedProcedure.input(z.object({ limit: z.number().int().min(1).max(30).optional() }).optional()).query(async ({ input }) => {
+      try {
+        return await listFutureDiceSessions(input?.limit ?? 12);
+      } catch (error) {
+        return throwFutureDiceError(error);
+      }
+    }),
+    create: appProtectedProcedure.input(z.object({
+      gameMode: z.enum(["one_vs_one", "two_vs_two"]),
+      outcomeType: z.enum(["minutes", "go_no_go"]),
+      directoryUserIds: z.array(z.number().int().positive()).min(2).max(4),
+    })).mutation(async ({ ctx, input }) => {
+      const actor = futureDiceActorFromContext(ctx);
+      try {
+        return await createFutureDiceSession({ actor, ...input });
+      } catch (error) {
+        return throwFutureDiceError(error);
+      }
+    }),
+    roll: appProtectedProcedure.input(z.object({ sessionId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const actor = futureDiceActorFromContext(ctx);
+      try {
+        return await rollFutureDice({ sessionId: input.sessionId, actor });
+      } catch (error) {
+        return throwFutureDiceError(error);
+      }
+    }),
+    chooseOutcome: appProtectedProcedure.input(z.object({
+      sessionId: z.number().int().positive(),
+      selectedOutcome: z.string().trim().min(1).max(16),
+    })).mutation(async ({ ctx, input }) => {
+      const actor = futureDiceActorFromContext(ctx);
+      try {
+        const session = await chooseFutureDiceOutcome({ ...input, actor });
+        await announceFutureDice(ctx, `ผล Future Dice #${session.id} · ทีม ${session.winningTeam} ชนะ · เลือก ${session.selectedOutcome}`);
+        return session;
+      } catch (error) {
+        return throwFutureDiceError(error);
+      }
+    }),
+    setOutcomeType: appProtectedProcedure.input(z.object({
+      sessionId: z.number().int().positive(),
+      outcomeType: z.enum(["minutes", "go_no_go"]),
+    })).mutation(async ({ ctx, input }) => {
+      const actor = futureDiceActorFromContext(ctx);
+      if (!actor.isSupervisor) throw new TRPCError({ code: "FORBIDDEN", message: "เฉพาะหัวหน้าหรือสิทธิ์พิเศษเท่านั้นที่เลือกผลลัพธ์ได้" });
+      try {
+        return await setFutureDiceOutcomeType(input);
+      } catch (error) {
+        return throwFutureDiceError(error);
+      }
+    }),
+    cancel: appProtectedProcedure.input(z.object({ sessionId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const actor = futureDiceActorFromContext(ctx);
+      if (!actor.isSupervisor) throw new TRPCError({ code: "FORBIDDEN", message: "เฉพาะหัวหน้าหรือสิทธิ์พิเศษเท่านั้นที่ยกเลิกเกมได้" });
+      try {
+        return await cancelFutureDiceSession(input.sessionId);
+      } catch (error) {
+        return throwFutureDiceError(error);
       }
     }),
   }),

@@ -44,6 +44,16 @@ export const appDirectoryUsers = mysqlTable("appDirectoryUsers", {
   codeUnique: uniqueIndex("appDirectoryUsers_code_unique").on(table.code),
 }));
 
+/** Last-seen heartbeat for authenticated app-directory users; it is not a second user directory. */
+export const appDirectoryPresence = mysqlTable("appDirectoryPresence", {
+  id: int("id").autoincrement().primaryKey(),
+  directoryUserId: int("directoryUserId").notNull().references(() => appDirectoryUsers.id, { onDelete: "cascade" }),
+  lastSeenAt: timestamp("lastSeenAt").defaultNow().notNull(),
+}, table => ({
+  directoryUserUnique: uniqueIndex("appDirectoryPresence_directory_user_unique").on(table.directoryUserId),
+  lastSeenLookup: index("appDirectoryPresence_last_seen_lookup").on(table.lastSeenAt),
+}));
+
 /** A fleet group whose assigned guides receive pickup notifications. */
 export const vehicleGroups = mysqlTable("vehicleGroups", {
   id: int("id").autoincrement().primaryKey(),
@@ -149,6 +159,69 @@ export const vehicleNotifications = mysqlTable("vehicleNotifications", {
   recipientUnreadLookup: index("vehicleNotifications_recipient_unread_lookup").on(table.recipientUserId, table.readAt),
 }));
 
+/** Server-authoritative dice-game session; game state must not be owned by the browser. */
+export const futureDiceSessions = mysqlTable("futureDiceSessions", {
+  id: int("id").autoincrement().primaryKey(),
+  status: mysqlEnum("futureDiceSessionStatus", ["open", "completed", "cancelled"]).default("open").notNull(),
+  gameMode: mysqlEnum("futureDiceGameMode", ["one_vs_one", "two_vs_two"]).notNull(),
+  outcomeType: mysqlEnum("futureDiceOutcomeType", ["minutes", "go_no_go"]).notNull(),
+  currentTurn: int("currentTurn").default(0).notNull(),
+  currentRound: int("currentRound").default(1).notNull(),
+  winningTeam: mysqlEnum("futureDiceWinningTeam", ["A", "B"]),
+  selectedOutcome: varchar("selectedOutcome", { length: 16 }),
+  createdByDirectoryUserId: int("createdByDirectoryUserId"),
+  createdByName: varchar("createdByName", { length: 128 }).notNull(),
+  completedAt: timestamp("completedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  statusUpdatedLookup: index("futureDiceSessions_status_updated_lookup").on(table.status, table.updatedAt),
+  creatorDirectoryUser: foreignKey({
+    name: "futureDiceSessions_creator_directory_fk",
+    columns: [table.createdByDirectoryUserId],
+    foreignColumns: [appDirectoryUsers.id],
+  }).onDelete("set null"),
+}));
+
+/** Player roster is copied from the directory so historical games remain readable after a directory edit. */
+export const futureDicePlayers = mysqlTable("futureDicePlayers", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId").notNull().references(() => futureDiceSessions.id, { onDelete: "cascade" }),
+  directoryUserId: int("directoryUserId").references(() => appDirectoryUsers.id, { onDelete: "set null" }),
+  playerName: varchar("playerName", { length: 128 }).notNull(),
+  slot: mysqlEnum("futureDicePlayerSlot", ["A1", "B1", "A2", "B2"]).notNull(),
+  team: mysqlEnum("futureDicePlayerTeam", ["A", "B"]).notNull(),
+  turnOrder: int("turnOrder").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => ({
+  sessionSlotUnique: uniqueIndex("futureDicePlayers_session_slot_unique").on(table.sessionId, table.slot),
+  sessionTurnUnique: uniqueIndex("futureDicePlayers_session_turn_unique").on(table.sessionId, table.turnOrder),
+  directoryLookup: index("futureDicePlayers_directory_lookup").on(table.directoryUserId),
+}));
+
+/** Each row is a server-generated immutable dice result for one turn. */
+export const futureDiceRolls = mysqlTable("futureDiceRolls", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId").notNull().references(() => futureDiceSessions.id, { onDelete: "cascade" }),
+  round: int("round").default(1).notNull(),
+  playerId: int("playerId").notNull().references(() => futureDicePlayers.id, { onDelete: "restrict" }),
+  turnOrder: int("turnOrder").notNull(),
+  dieOne: int("dieOne").notNull(),
+  dieTwo: int("dieTwo").notNull(),
+  total: int("total").notNull(),
+  rolledByDirectoryUserId: int("rolledByDirectoryUserId"),
+  rolledByName: varchar("rolledByName", { length: 128 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => ({
+  sessionRoundTurnUnique: uniqueIndex("futureDiceRolls_session_round_turn_unique").on(table.sessionId, table.round, table.turnOrder),
+  sessionTimeLookup: index("futureDiceRolls_session_time_lookup").on(table.sessionId, table.createdAt),
+  rollerDirectoryUser: foreignKey({
+    name: "futureDiceRolls_roller_directory_fk",
+    columns: [table.rolledByDirectoryUserId],
+    foreignColumns: [appDirectoryUsers.id],
+  }).onDelete("set null"),
+}));
+
 /** Shared app state for code-based modules that do not use Manus OAuth identity. */
 export const appOperationsSnapshots = mysqlTable("appOperationsSnapshots", {
   id: int("id").autoincrement().primaryKey(),
@@ -228,3 +301,6 @@ export type AppLiveMessage = typeof appLiveMessages.$inferSelect;
 export type Vehicle = typeof vehicles.$inferSelect;
 export type VehicleGroup = typeof vehicleGroups.$inferSelect;
 export type VehicleStatusHistory = typeof vehicleStatusHistory.$inferSelect;
+export type FutureDiceSession = typeof futureDiceSessions.$inferSelect;
+export type FutureDicePlayer = typeof futureDicePlayers.$inferSelect;
+export type FutureDiceRoll = typeof futureDiceRolls.$inferSelect;

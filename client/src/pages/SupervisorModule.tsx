@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Activity, AlertTriangle, ArrowLeft, BarChart3, CalendarDays, Check, Clock3, Database, Languages, LayoutDashboard, ListChecks, MessageCircle, Plus, RefreshCw, Settings2, Truck, UsersRound } from "lucide-react";
+import { Activity, AlertTriangle, ArrowLeft, BarChart3, CalendarDays, Check, Clock3, Database, Dices, Languages, LayoutDashboard, ListChecks, MessageCircle, Plus, RefreshCw, Settings2, Truck, UsersRound } from "lucide-react";
 import { ActiveVehicleDetailList } from "@/components/ActiveVehicleDetailList";
 import { VehicleChoiceList, VehicleReplacementPanel, type VehicleChoiceItem } from "@/components/VehicleChoiceList";
 import { VehicleSafetyNoticeDialog, VehicleSafetyNoticeIndicator, VehicleSafetyNoticeList } from "@/components/VehicleSafetyNotice";
@@ -41,6 +41,7 @@ import { DisconnectedVehicleStatusCards } from "@/components/DisconnectedVehicle
 import { SupervisorStandbyCreator, type SupervisorStandbyDraft } from "@/components/SupervisorStandbyCreator";
 import { findSessionConflict, findSessionDraftDuplicates } from "@/lib/session-conflicts";
 import { useCanonicalAppDirectory } from "@/hooks/useCanonicalAppDirectory";
+import FutureDiceGame from "@/components/FutureDiceGame";
 
 type SupervisorTab = "dashboard" | "status" | "issues" | "communication" | "settings" | "queuePayout" | "database";
 type DataTab = "users" | "vehicles" | "fleet-groups" | "usage-hours";
@@ -176,7 +177,7 @@ export default function SupervisorModule() {
   const [supervisorReplaceToId, setSupervisorReplaceToId] = useState("");
   const [now, setNow] = useState(Date.now());
   const [dataTab, setDataTab] = useState<DataTab>("users");
-  const [queuePayoutView, setQueuePayoutView] = useState<"daily" | "payout">("daily");
+  const [queuePayoutView, setQueuePayoutView] = useState<"daily" | "payout" | "future">("daily");
   const [showAddUser, setShowAddUser] = useState(false);
   const [showSupervisorStandbyCreator, setShowSupervisorStandbyCreator] = useState(false);
   const [newUserName, setNewUserName] = useState("");
@@ -765,7 +766,7 @@ export default function SupervisorModule() {
     setNotice(`สร้างรายการ ${session.sessionId} เป็น Standby แล้ว`);
   };
   const supervisorGuideDashboard = <SupervisorDashboard vehicles={vehicles} safetyNotices={safetyNotices} statusModel={supervisorStatusModel} activeSessions={guideActiveSessions} standbySessions={guideStandbySessions} members={guideMembers} now={now} notice={notice} onOpenSession={openGuideSession} onOpenQueue={() => { setNotice(""); setShowSupervisorStandbyCreator(true); }} onRefresh={() => { void fleetSnapshotQuery.refetch(); void guideSessionsQuery.refetch(); void guideStateQuery.refetch(); void vehicleFlowSnapshotQuery.refetch(); void directoryQuery.refetch(); }} onOpenStatusView={() => setTab("status")} />;
-  const supervisorQueuePayoutTabs = <nav className="m3-daily-tabs m3-alert-tabs" aria-label="เมนูหน้าคิวและตารางค่ารอบ"><button type="button" className={queuePayoutView === "daily" ? "selected" : ""} onClick={() => setQueuePayoutView("daily")}><CalendarDays size={15} /><span>บอร์ดบันทึกรายวัน</span></button><button type="button" className={queuePayoutView === "payout" ? "selected" : ""} onClick={() => setQueuePayoutView("payout")}><Settings2 size={15} /><span>ตารางค่ารอบ</span></button></nav>;
+  const supervisorQueuePayoutTabs = <nav className="m3-daily-tabs m3-alert-tabs" aria-label="เมนูหน้าคิวและตารางค่ารอบ"><button type="button" className={queuePayoutView === "daily" ? "selected" : ""} onClick={() => setQueuePayoutView("daily")}><CalendarDays size={15} /><span>บอร์ดบันทึกรายวัน</span></button><button type="button" className={queuePayoutView === "payout" ? "selected" : ""} onClick={() => setQueuePayoutView("payout")}><Settings2 size={15} /><span>ตารางค่ารอบ</span></button><button type="button" className={queuePayoutView === "future" ? "selected" : ""} onClick={() => setQueuePayoutView("future")}><Dices size={15} /><span>Future Dice</span></button></nav>;
   const supervisorGuideDailyBoard = <><div className="supervisor-queue-hub-heading"><p>QUEUE / DAILY BOARD</p><h2>บอร์ดบันทึกรายวัน</h2><span>คิวตั้งต้นชุดเดียวกับ Guide</span></div><section aria-label="บอร์ดบันทึกรายวัน"><TeamBoardQueueModule
     operatorName={currentSupervisorActor.name}
     rosterNames={Array.from(new Set([...guideActiveSessions, ...guideStandbySessions].flatMap(session => session.memberIds.map(memberId => guideMembers.find(member => member.id === memberId)?.name).filter((name): name is string => Boolean(name)))))}
@@ -838,7 +839,7 @@ export default function SupervisorModule() {
         {showSupervisorStandbyCreator && tab === "dashboard" && !selectedGuideSession ? <SupervisorStandbyCreator vehicles={supervisorStandbyVehicles} members={[...guideMembers.map(member => ({ id: member.id, name: member.name, role: snapshot.directoryUsers.find(user => String(user.id) === member.id)?.group })), ...(guideMembers.some(member => member.id === String(currentSupervisorActor.id)) ? [] : [{ id: String(currentSupervisorActor.id), name: currentSupervisorActor.name, role: "หัวหน้า" }])]} busyVehicleNumbers={new Set(guideSessions.filter(session => session.status !== "Completed").flatMap(session => session.vehicleIds.map(id => Number(id.replace(/^m3-v/, "")))))} busyMemberIds={new Set(guideSessions.filter(session => session.status !== "Completed").flatMap(session => session.memberIds))} creatorName={currentSupervisorActor.name} activeUserId={String(currentSupervisorActor.id)} safetyNotices={safetyNotices} onSafetyNoticeOpen={openSafetyNotices} onBack={() => setShowSupervisorStandbyCreator(false)} onCreate={createSupervisorStandby} /> : null}
         {tab === "status" && <VehicleResponsibilityGroupView vehicles={vehicles} responsibilityState={snapshot.vehicleState} directoryUsers={snapshot.directoryUsers} safetyNotices={safetyNotices} statusModel={supervisorStatusModel} titleKicker="SUPERVISOR / VEHICLE RESPONSIBILITY" chrome={safetyNoticeDialog} onBack={() => setTab("dashboard")} onSafetyNoticeOpen={openSafetyNotices} />}
         {tab === "dashboard" && !showSupervisorStandbyCreator && (selectedGuideSession ? supervisorSessionDetail : <>{supervisorGuideDashboard}{supervisorGuideDailyBoard}</>)}
-        {tab === "queuePayout" && <>{supervisorQueuePayoutTabs}{queuePayoutView === "daily" ? supervisorGuideDailyBoard : <SupervisorPayoutOverview users={supervisorRoundTableUsers} sessions={guideSessions as PayoutSessionLike[]} values={snapshot.guideState.payoutRoundValues} />}</>}
+        {tab === "queuePayout" && <>{supervisorQueuePayoutTabs}{queuePayoutView === "daily" ? supervisorGuideDailyBoard : queuePayoutView === "payout" ? <SupervisorPayoutOverview users={supervisorRoundTableUsers} sessions={guideSessions as PayoutSessionLike[]} values={snapshot.guideState.payoutRoundValues} /> : <FutureDiceGame />}</>}
         {tab === "issues" && supervisorGuideDailyBoard}
         {tab === "communication" && <section className="supervisor-communication-panel"><div className="supervisor-communication-heading"><div><p>SUPERVISOR / COMMUNICATION</p><h3>ห้องสื่อสาร</h3><span>PTT และข้อความร่วมกับไกด์และช่าง</span></div><MessageCircle size={22} /></div><PttRoomPanel /><CommunicationChat module="supervisor" /></section>}
         {tab === "settings" && <SupervisorPayoutOverview users={supervisorRoundTableUsers} sessions={guideSessions as PayoutSessionLike[]} values={snapshot.guideState.payoutRoundValues} />}

@@ -1,8 +1,9 @@
-import { and, desc, eq, notInArray } from "drizzle-orm";
+import { and, desc, eq, gte, notInArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { AppDirectoryUser, InsertAppDirectoryUser, InsertUser, appDirectoryUsers, appLiveMessages, appOperationalHistory, appOperationsSnapshots, users } from "../drizzle/schema";
+import { AppDirectoryUser, InsertAppDirectoryUser, InsertUser, appDirectoryPresence, appDirectoryUsers, appLiveMessages, appOperationalHistory, appOperationsSnapshots, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { directoryCredentialFields, hashDirectoryCode, hashMatches } from './appDirectoryAuth';
+import { APP_DIRECTORY_ONLINE_WINDOW_MS } from "./appDirectoryPresence";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -112,6 +113,23 @@ export async function getAppDirectoryUserById(id: number): Promise<AppDirectoryU
   if (!db) return undefined;
   const result = await db.select().from(appDirectoryUsers).where(eq(appDirectoryUsers.id, id)).limit(1);
   return result[0];
+}
+
+export async function touchAppDirectoryPresence(directoryUserId: number, lastSeenAt = new Date()): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.insert(appDirectoryPresence).values({ directoryUserId, lastSeenAt })
+    .onDuplicateKeyUpdate({ set: { lastSeenAt } });
+}
+
+export async function getOnlineAppDirectoryUserIds(now = Date.now()): Promise<Set<number>> {
+  const db = await getDb();
+  if (!db) return new Set();
+  const cutoff = new Date(now - APP_DIRECTORY_ONLINE_WINDOW_MS);
+  const rows = await db.select({ directoryUserId: appDirectoryPresence.directoryUserId })
+    .from(appDirectoryPresence)
+    .where(gte(appDirectoryPresence.lastSeenAt, cutoff));
+  return new Set(rows.map(row => Number(row.directoryUserId)));
 }
 
 export async function setAppDirectoryCodeHash(id: number, codeHash: string, codeSalt: string): Promise<void> {
