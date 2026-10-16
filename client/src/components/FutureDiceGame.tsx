@@ -216,6 +216,14 @@ export default function FutureDiceGame() {
     }
   };
 
+  const leaveGame = () => {
+    if (isCancellableSession && (canReset || staleActiveSession)) {
+      void resetGame();
+      return;
+    }
+    closePopup();
+  };
+
   useEffect(() => {
     if (!isOpen || activeSession?.status !== "cancelled") return;
     closePopup();
@@ -327,7 +335,7 @@ export default function FutureDiceGame() {
     const choices = activeSession.outcomeType === "minutes" ? ["30", "60"] : ["ไป", "ไม่ไป"];
     return <div className="body">
       <div className="game-head"><div><small>{gameMode}</small><h1>{isFinished ? "ผลการทอย" : "ทอยลูกเต๋า"}</h1></div><span className="round">{activeSession.currentRound > 1 ? `รอบตัดสิน ${activeSession.currentRound}` : `รอบ ${activeSession.currentRound}`}</span></div>
-      <div className="game-controls"><button type="button" className="back-app" onClick={closePopup}>กลับหน้าก่อนหน้า</button>{isCancellableSession && (canReset || staleActiveSession) && <button type="button" className="reset-game" onClick={() => void resetGame()} disabled={isBusy}>{cancelMutation.isPending ? "กำลังยกเลิก…" : staleActiveSession && !canReset ? "ยกเลิกเกมค้างเพื่อเริ่มรายการใหม่" : "รีเซ็ต / ยกเลิกการทอย"}</button>}</div>
+      <div className="game-controls"><button type="button" className="back-app" onClick={leaveGame} disabled={cancelMutation.isPending}>{isCancellableSession && (canReset || staleActiveSession) ? "ยกเลิกรายการและเริ่มใหม่" : "กลับหน้าก่อนหน้า"}</button>{isCancellableSession && (canReset || staleActiveSession) && <button type="button" className="reset-game" onClick={() => void resetGame()} disabled={isBusy}>{cancelMutation.isPending ? "กำลังยกเลิก…" : staleActiveSession && !canReset ? "ยกเลิกเกมค้างเพื่อเริ่มรายการใหม่" : "รีเซ็ต / ยกเลิกการทอย"}</button>}</div>
       {gameMode === "2v2" && <div className="score"><span>ทีม A <b>{activeSession.scores.A}</b></span><span>—</span><span>ทีม B <b>{activeSession.scores.B}</b></span></div>}
       <div className="table">{(["A", "B"] as const).map(team => <div className={`side ${team === "B" ? "b" : ""}`} key={team}><div className="side-head">{gameMode === "1v1" ? (team === "A" ? "ผู้เล่น A" : "ผู้เล่น B") : `ทีม ${team}`}</div>{activeSession.players.filter(player => player.team === team).map(player => {
         const rollResult = player.rolls.find(rollItem => rollItem.round === activeSession.currentRound);
