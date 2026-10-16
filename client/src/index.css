@@ -13839,3 +13839,24 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
   .future-dice-player strong { font-size: 18px; }
   .future-dice-footer { align-items: flex-start; flex-direction: column; }
 }
+
+/* Keep all three Guide queue sub-tabs visible on mobile without a hidden horizontal-scroll affordance. */
+.m3-guide-queue-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: visible;
+}
+.m3-guide-queue-tabs button {
+  flex: initial;
+  min-width: 0;
+  min-height: 46px;
+  padding: 8px 5px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25;
+}
+.m3-guide-queue-tabs button svg { flex: 0 0 auto; }
+@media (max-width: 600px) {
+  .m3-guide-queue-tabs { gap: 4px; }
+  .m3-guide-queue-tabs button { gap: 4px; padding: 8px 3px; font-size: 10px; }
+}
