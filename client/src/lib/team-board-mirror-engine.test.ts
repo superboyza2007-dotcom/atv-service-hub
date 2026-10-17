@@ -67,7 +67,7 @@ describe("Team Board external Active lifecycle", () => {
     expect(selectVisibleActiveRuns(legacy.state.active, true)).toEqual([]);
   });
 
-  it("reconciles a return when the empty snapshot event was already recorded", () => {
+  it("keeps a source Active run pending when the snapshot becomes empty", () => {
     const teamBoard: BoardMember[] = [
       { id: "active-a", name: "Active A", teamId: "team-active", partnerId: "active-b", shift: "08:00", boardOrder: 1, rounds: 0, role: "te" },
       { id: "active-b", name: "Active B", teamId: "team-active", partnerId: "active-a", shift: "08:00", boardOrder: 2, rounds: 0, role: "te" },
@@ -87,11 +87,18 @@ describe("Team Board external Active lifecycle", () => {
 
     const returned = recordActiveSessions(started.state, { eventId: "2.3:empty", sessions: [], now: 200 });
     expect(returned.error).toBeUndefined();
-    expect(returned.ignored).not.toBe(true);
-    expect(returned.state.active.filter(run => run.sourceSessionId)).toHaveLength(0);
-    expect(returned.state.standby).toEqual(["waiting-a", "waiting-b", "active-a", "active-b"]);
-    expect(returned.state.members["active-a"]?.rounds).toBe(1);
-    expect(returned.state.members["active-b"]?.rounds).toBe(1);
+    expect(returned.state.active.filter(run => run.sourceSessionId).map(run => run.sourceSessionId)).toEqual(["M3-001"]);
+    expect(returned.state.standby).toEqual(["waiting-a", "waiting-b"]);
+    expect(returned.state.members["active-a"]?.rounds).toBe(0);
+    expect(returned.state.members["active-b"]?.rounds).toBe(0);
+
+    const laterSession = recordActiveSessions(returned.state, {
+      eventId: "2.3:active-2",
+      sessions: [{ sessionId: "M3-002", memberIds: ["waiting-a", "waiting-b"], startedAt: 210, durationSeconds: null }],
+      now: 210,
+    });
+    expect(laterSession.error).toBeUndefined();
+    expect(laterSession.state.active.map(run => run.sourceSessionId)).toEqual(["M3-001", "M3-002"]);
   });
 
   it("routes each 2.3 Active Session through the same queue rules without merging sessions", () => {
@@ -116,7 +123,7 @@ describe("Team Board external Active lifecycle", () => {
       now: 200,
     });
     expect(next.error).toBeUndefined();
-    expect(next.state.active.map(run => run.sourceSessionId)).toEqual(["M3-002"]);
-    expect(next.state.standby).toEqual(["queue-2", "external-1"]);
+    expect(next.state.active.map(run => run.sourceSessionId)).toEqual(["M3-001", "M3-002"]);
+    expect(next.state.standby).toEqual(["queue-2"]);
   });
 });

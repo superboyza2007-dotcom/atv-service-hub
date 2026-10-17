@@ -255,13 +255,12 @@ export function recordActiveSessions(inputState: QueueState, input: MirrorActive
 
   let next = state;
   const desiredIds = new Set(sessions.map(session => session.sessionId));
+  // A source snapshot is only an observation of 2.3 Active. Its disappearance
+  // is not a queue command and must never complete an Active run: the operator
+  // must press "คืนคิว / จบรายการ" on the Team Board. Keeping the source run in
+  // state also prevents a newly-created 2.3 session from replacing the prior
+  // assignment in 06 / ACTIVE ZONE.
   const exitedRunIds: string[] = [];
-  for (const run of next.active.filter(run => run.sourceSessionId && !desiredIds.has(run.sourceSessionId))) {
-    const completed = completeRun(next, run.id, now);
-    if (completed.error) return { state, error: completed.error };
-    next = completed.state;
-    exitedRunIds.push(run.id);
-  }
 
   const enteredIds: string[] = [];
   for (const session of sessions) {
@@ -305,7 +304,7 @@ export function recordActiveSessions(inputState: QueueState, input: MirrorActive
   next.events.unshift({
     at: now,
     code: "ACTIVE_23_SYNCED",
-    message: `2.3 Active ${eventId}: ${sessions.length} รายการเข้า Run Queue, คืน ${exitedRunIds.length} รายการ`,
+    message: `2.3 Active ${eventId}: ${sessions.length} รายการเข้า Run Queue, รอคืนคิวด้วยปุ่มยืนยัน`,
     memberIds: sessions.flatMap(session => session.memberIds),
   });
   next.events = next.events.slice(0, 100);
