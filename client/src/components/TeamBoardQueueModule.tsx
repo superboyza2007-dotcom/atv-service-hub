@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Activity, ArrowRight, Check, ChevronRight, Clock3, ListFilter, LockKeyhole, Play, ShieldCheck, UserRound, UsersRound, X, Zap } from "lucide-react";
 import { completeRun, createQueueState, dispatch as engineDispatch, normalizeStandbyTeamPairs, planByRequiredUnits, type BoardMember, type QueueEvent, type QueueState } from "@/lib/team-board-queue-engine";
-import { expandActiveRunSelection, recordActive, recordActiveSessions, restoreLegacyAtvMirrorRuns, selectVisibleActiveRuns } from "@/lib/team-board-mirror-engine";
+import { expandActiveRunSelection, recordActive, recordActiveSessions, selectVisibleActiveRuns } from "@/lib/team-board-mirror-engine";
 import { expiredLocalRunIds, runClock } from "@/lib/team-board-run-timing";
 import { trpc } from "@/lib/trpc";
 import { OPERATIONS_SNAPSHOT_KEYS, parseOperationsSnapshot, serializeOperationsSnapshot } from "@/lib/operations-snapshot";
@@ -363,14 +363,6 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
     }
   }, [activeNames, activeEventId, activeGroups, atvMirrorKey, duration, hasSourceActiveInput, members, sourceActiveGroups, sourceActiveSessions]);
 
-  useEffect(() => {
-    if (!hasSourceActiveInput || !engineState || !sharedQueueHydrated.current || readOnly) return;
-    const restored = restoreLegacyAtvMirrorRuns(engineState);
-    if (!restored) return;
-    engineRef.current = restored;
-    setEngineState(restored);
-    setQueueReads((logs) => [`${new Date().toLocaleTimeString("th-TH")}  ATV_SOURCE_ACTIVE → removed legacy synthetic Active; queue order restored without adding rounds`, ...logs].slice(0, 8));
-  }, [activeGroups, engineState, hasSourceActiveInput, readOnly]);
   if (sharedQueueQuery.isError) return <div className="queue-shared-empty" role="alert">เชื่อมต่อ Run Queue บน Server ไม่ได้ กรุณาลองใหม่</div>;
   if (!sharedQueueHydrated.current) return <div className="queue-shared-empty" role="status">กำลังโหลด Run Queue จาก Server…</div>;
   if (readOnly) return state ? <QueueDisplayBoard operatorName={operatorName} members={members} state={visibleQueueState ?? state} dailySessions={dailySessions} onDailySessionOpen={onDailySessionOpen} onNavigate={() => undefined} /> : <div className="queue-shared-empty">ยังไม่มีข้อมูล Shared Run Queue</div>;

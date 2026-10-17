@@ -318,17 +318,12 @@ export function selectVisibleActiveRuns(activeRuns: QueueState["active"], hasSou
 }
 
 
-/** Removes only persisted ATV mirror artifacts created by the former synthetic source mirror.
- * Does not award rounds, change roles, or touch manually dispatched Active runs. */
+/**
+ * Legacy mirror records are retained until an operator explicitly completes
+ * them. There is no safe observation-only proof that an old Active is done;
+ * returning it here would violate the locked manual-return contract.
+ */
 export function restoreLegacyAtvMirrorRuns(inputState: QueueState): QueueState | undefined {
-  const legacyRuns = inputState.active.filter((run) => run.externalEventId?.startsWith("atv:"));
-  if (!legacyRuns.length) return undefined;
-  const next = structuredClone(inputState);
-  const legacyIds = new Set(legacyRuns.map((run) => run.id));
-  next.active = next.active.filter((run) => !legacyIds.has(run.id));
-  const stillActiveIds = new Set(next.active.flatMap((run) => run.memberIds));
-  const returnedIds = unique(legacyRuns.flatMap((run) => run.memberIds))
-    .filter((id) => Boolean(next.members[id]) && !stillActiveIds.has(id) && !next.standby.includes(id));
-  next.standby = [...next.standby, ...returnedIds];
-  return next;
+  void inputState;
+  return undefined;
 }

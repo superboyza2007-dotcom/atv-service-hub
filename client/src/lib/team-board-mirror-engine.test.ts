@@ -22,21 +22,17 @@ describe("Team Board external Active lifecycle", () => {
     expect(nextSnapshot.state.standby).toEqual(["queue-1", "queue-2", "external-1"]);
   });
 
-  it("removes only legacy synthetic ATV mirror runs without awarding rounds or changing roles", () => {
+  it("does not return a legacy Active run just because a newer run exists", () => {
     const initial = createQueueState(board);
     const oldSourceRun = recordActive(initial, { eventId: "atv:old-source-snapshot", activeMemberIds: ["external-1"], now: 100 });
     const independentRun = engineDispatch(oldSourceRun.state, { memberIds: ["queue-1"], units: 0.5, mode: "normal", now: 150 });
     expect(independentRun.error).toBeUndefined();
 
-    const cleaned = restoreLegacyAtvMirrorRuns(independentRun.state);
-    expect(cleaned).toBeDefined();
-    expect(cleaned?.active.map((run) => run.memberIds)).toEqual([["queue-1"]]);
-    expect(cleaned?.active[0]?.id).toBe(independentRun.run?.id);
-    expect(cleaned?.standby).toEqual(["queue-2", "external-1"]);
-    expect(cleaned?.members["external-1"]?.rounds).toBe(0);
-    expect(cleaned?.members["queue-1"]?.rounds).toBe(0);
-    expect(cleaned?.members["external-1"]?.role).toBe(initial.members["external-1"]?.role);
-    expect(cleaned?.members["queue-1"]?.role).toBe(independentRun.state.members["queue-1"]?.role);
+    expect(restoreLegacyAtvMirrorRuns(independentRun.state)).toBeUndefined();
+    expect(independentRun.state.active.map((run) => run.memberIds)).toEqual([["external-1"], ["queue-1"]]);
+    expect(independentRun.state.standby).toEqual(["queue-2"]);
+    expect(independentRun.state.members["external-1"]?.rounds).toBe(0);
+    expect(independentRun.state.members["queue-1"]?.rounds).toBe(0);
   });
 
   it("does not modify queue state when there are no former synthetic ATV runs", () => {
