@@ -637,6 +637,13 @@ function QueueDisplayBoard({ operatorName, members, state, standbyNames = [], da
       return (left.status === "Active" ? 0 : 1) - (right.status === "Active" ? 0 : 1) || dueAt(left) - dueAt(right);
     });
   });
+  const activeDailySessions = DAILY_SECTION_SLOTS.flatMap((slot) => dailySessionsBySlot[slot]).sort((left, right) => {
+    const dueAt = (session: DailySessionRecord) => {
+      const startedAt = session.startedAt ? Date.parse(session.startedAt) : Number.MAX_SAFE_INTEGER;
+      return Number.isFinite(startedAt) ? startedAt + session.durationMinutes * 60_000 : Number.MAX_SAFE_INTEGER;
+    };
+    return dueAt(left) - dueAt(right);
+  });
   const todayKey = dailyOperationalDateKey(now);
   const operationalDate = new Date(`${todayKey}T00:00:00+07:00`);
   const eventsForToday = state.events.filter((event) => dailyOperationalDateKey(new Date(event.at)) === todayKey);
@@ -684,8 +691,11 @@ function QueueDisplayBoard({ operatorName, members, state, standbyNames = [], da
                 </div>
                 <div className="queue-display-status-row"><div>QL{names(ql)}</div><div>QF{names(qf)}</div></div>
                 <div className="queue-display-status-row queue-display-colored"><div className="queue-display-dp">Dp{names(dp)}</div><div className="queue-display-floating">^ <span>ตัวลอย{names(floating, true)}</span></div></div>
+                <div className="queue-display-active-fill" aria-label="รายการ Active จากหน้าแรก">
+                  {activeDailySessions.length ? activeDailySessions.map((session) => <DailySessionCard key={`board-active-${session.sessionId}`} session={session} onOpen={onDailySessionOpen} />) : <span className="queue-display-active-empty">ไม่มีรายการ Active</span>}
+                </div>
               </div>
-              {DAILY_SECTION_SLOTS.map((slot) => <section className="queue-display-empty queue-display-section-button queue-display-daily-column" key={slot} aria-label={`รายการ Active ในช่วง ${slot}`}><div className="queue-display-daily-session-list">{dailySessionsBySlot[slot].length ? dailySessionsBySlot[slot].map(session => <DailySessionCard key={session.sessionId} session={session} onOpen={onDailySessionOpen} />) : <span className="queue-display-daily-empty">ยังไม่มีรายการ Active</span>}</div><button type="button" className="queue-display-section-history-button" onClick={() => setSelectedSection(slot)}>ดู Event ของช่วงนี้ · {eventsForToday.filter((event) => sectionForEvent(event.at) === slot).length}</button></section>)}
+              {DAILY_SECTION_SLOTS.map((slot) => <section className="queue-display-empty queue-display-section-button queue-display-daily-column" key={slot} aria-label={`รายการ Active ในช่วง ${slot}`}><div className="queue-display-daily-session-list"><span className="queue-display-daily-empty">ดูรายการ Active ในพื้นที่ด้านซ้าย</span></div><button type="button" className="queue-display-section-history-button" onClick={() => setSelectedSection(slot)}>ดู Event ของช่วงนี้ · {eventsForToday.filter((event) => sectionForEvent(event.at) === slot).length}</button></section>)}
             </div>
             <div className="queue-display-footer">แสดงจาก 02 / CARD คิว Standby หลัก · ลำดับทีมและตำแหน่ง Te / Dp / Wk</div>
           </div>
