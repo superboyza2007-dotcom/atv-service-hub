@@ -651,7 +651,13 @@ function QueueDisplayBoard({ operatorName, members, state, standbyNames = [], da
       return (left.status === "Active" ? 0 : 1) - (right.status === "Active" ? 0 : 1) || dueAt(left) - dueAt(right);
     });
   });
-  const activeDailySessions = DAILY_SECTION_SLOTS.flatMap((slot) => dailySessionsBySlot[slot]);
+  const activeDailySessions = DAILY_SECTION_SLOTS.flatMap((slot) => dailySessionsBySlot[slot]).sort((left, right) => {
+    const dueAt = (session: DailySessionRecord) => {
+      const startedAt = session.startedAt ? Date.parse(session.startedAt) : Number.MAX_SAFE_INTEGER;
+      return Number.isFinite(startedAt) ? startedAt + session.durationMinutes * 60_000 : Number.MAX_SAFE_INTEGER;
+    };
+    return dueAt(left) - dueAt(right);
+  });
   const todayKey = dailyOperationalDateKey(now);
   const operationalDate = new Date(`${todayKey}T00:00:00+07:00`);
   const eventsForToday = state.events.filter((event) => dailyOperationalDateKey(new Date(event.at)) === todayKey);
