@@ -13469,9 +13469,6 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
 .queue-display-daily-session > span:not(.queue-display-daily-session-head) { color:#376d3b; font-size:10px; line-height:1.25; }
 .queue-display-daily-session small { overflow:hidden; color:#789078; font:600 9px 'IBM Plex Mono', monospace; text-overflow:ellipsis; white-space:nowrap; }
 .queue-display-daily-empty { display:grid; min-height:160px; place-items:center; color:#789078; font-size:12px; text-align:center; }
-.queue-display-active-fill { display:grid; align-content:start; gap:8px; min-height:180px; padding:10px; border-top:2px solid #1b301c; background:rgba(239,255,232,.42); }
-.queue-display-active-fill .queue-display-daily-session { width:100%; box-sizing:border-box; }
-.queue-display-active-empty { display:grid; min-height:150px; place-items:center; color:#789078; font-size:12px; text-align:center; }
 .queue-display-section-history-button { width:100%; padding:7px 8px; border:1px solid #9bc192; border-radius:7px; background:#e7f4e1; color:#376d3b; font-size:10px; cursor:pointer; }
 .queue-display-section-history-button:hover, .queue-display-section-history-button:focus-visible { background:#d7edce; outline:2px solid rgba(55,109,59,.2); outline-offset:1px; }
 .queue-display-history-backdrop { position:fixed; inset:0; z-index:60; display:grid; place-items:center; padding:20px; background:rgba(8,20,12,.58); }
