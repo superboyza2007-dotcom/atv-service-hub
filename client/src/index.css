@@ -13446,6 +13446,8 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
 .queue-display-status-row { display:grid; grid-template-columns:1fr 1fr; min-height:38px; }
 .queue-display-status-row > div { display:grid; place-items:center; color:#f3fbef; border-right:2px solid #1b301c; border-bottom:2px solid #1b301c; background:#bdd5b5; font:600 13px 'IBM Plex Mono', monospace; }
 .queue-display-status-row > div:last-child { border-right:0; }
+.queue-display-create-session { display:block; width:calc(100% - 16px); margin:8px auto 0; padding:8px 10px; border:1px solid #3f9b42; border-radius:7px; background:#2f8f38; color:#fff; font:700 12px 'IBM Plex Mono', monospace; cursor:pointer; }
+.queue-display-create-session:hover, .queue-display-create-session:focus-visible { background:#26782f; outline:2px solid rgba(47,143,56,.28); outline-offset:1px; }
 .queue-display-colored { min-height:75px; }
 .queue-display-colored > div { color:#fff; font-size:13px; }
 .queue-display-dp { background:#f5a30b !important; }
