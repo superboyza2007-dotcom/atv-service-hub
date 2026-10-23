@@ -33,3 +33,21 @@ export function excludeCurrentGuideMember<T extends SelectableGuideMember>(
     return true;
   });
 }
+
+/**
+ * Keep the live Run Queue order at the top of the 2.1 member selector. Members
+ * absent from the queue remain available, but are deliberately placed after
+ * the queued names so the operator can pick the front of the line quickly.
+ */
+export function sortGuideMembersByQueue<T extends SelectableGuideMember>(members: T[], standbyKeys: string[]): T[] {
+  const normalizeKey = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase("th-TH");
+  const queueRank = new Map(standbyKeys.flatMap((key, index) => [[String(key), index], [normalizeKey(String(key)), index]]));
+  return [...members].sort((left, right) => {
+    const leftRank = queueRank.get(String(left.id)) ?? queueRank.get(normalizeKey(left.name));
+    const rightRank = queueRank.get(String(right.id)) ?? queueRank.get(normalizeKey(right.name));
+    if (leftRank !== undefined && rightRank !== undefined) return leftRank - rightRank;
+    if (leftRank !== undefined) return -1;
+    if (rightRank !== undefined) return 1;
+    return left.name.localeCompare(right.name, "th");
+  });
+}

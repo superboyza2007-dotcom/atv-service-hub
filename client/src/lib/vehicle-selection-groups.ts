@@ -37,3 +37,37 @@ export function groupVehicleOptionsByResponsibility<T extends NumberedVehicle>(
     .sort((left, right) => left.order - right.order || left.label.localeCompare(right.label, "th"))
     .map(({ order: _order, ...group }) => group);
 }
+
+/**
+ * Put the vehicle group owned by the primary operator/team first. The other
+ * groups follow the earliest manager position found in the live queue, while
+ * unassigned vehicles remain last.
+ */
+export function prioritizeVehicleGroupsByQueue<T extends NumberedVehicle>(
+  groups: VehicleSelectionGroup<T>[],
+  responsibilityGroups: ResponsibilityGroupRecord[],
+  primaryMemberIds: string[],
+  queueMemberIds: string[],
+): VehicleSelectionGroup<T>[] {
+  const queueRank = new Map(queueMemberIds.map((id, index) => [String(id), index]));
+  const primaryIds = new Set(primaryMemberIds.map(id => Number(id)).filter(id => Number.isInteger(id)));
+  const originalOrder = new Map(groups.map((group, index) => [group.key, index]));
+  const groupMeta = new Map(responsibilityGroups.map(group => [String(group.id), group]));
+  const groupRank = (group: VehicleSelectionGroup<T>) => {
+    if (group.key === "unassigned") return { primary: 1, queue: Number.MAX_SAFE_INTEGER };
+    const responsibility = groupMeta.get(group.key.replace(/^group-/, ""));
+    if (!responsibility) return { primary: 1, queue: Number.MAX_SAFE_INTEGER };
+    const primary = responsibility.managers.some(managerId => primaryIds.has(managerId)) ? 0 : 1;
+    const queue = Math.min(...responsibility.managers.map(managerId => queueRank.get(String(managerId)) ?? Number.MAX_SAFE_INTEGER));
+    return { primary, queue };
+  };
+
+  return [...groups].sort((left, right) => {
+    const leftRank = groupRank(left);
+    const rightRank = groupRank(right);
+    return leftRank.primary - rightRank.primary
+      || leftRank.queue - rightRank.queue
+      || (originalOrder.get(left.key) ?? 0) - (originalOrder.get(right.key) ?? 0)
+      || left.label.localeCompare(right.label, "th");
+  });
+}

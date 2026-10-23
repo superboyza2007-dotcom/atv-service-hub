@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { excludeCurrentGuideMember, guideMembersFromCanonicalDirectory } from "./guide-member-selector";
+import { excludeCurrentGuideMember, guideMembersFromCanonicalDirectory, sortGuideMembersByQueue } from "./guide-member-selector";
 
 describe("guide member selector", () => {
   it("uses only Guide and Mechanic entries from the canonical Supervisor directory", () => {
@@ -42,5 +42,16 @@ describe("guide member selector", () => {
     ];
 
     expect(excludeCurrentGuideMember(members, "1001", "1001", "บอย").map(member => member.name)).toEqual(["นก"]);
+  });
+
+  it("puts members in the current standby queue first and keeps non-queued members last", () => {
+    const members = [
+      { id: "1003", name: "นอกคิว" },
+      { id: "1002", name: "คิวสอง" },
+      { id: "1001", name: "คิวหนึ่ง" },
+      { id: "1004", name: "นอกคิวสอง" },
+    ];
+
+    expect(sortGuideMembersByQueue(members, ["1001", "1002"]).map(member => member.id)).toEqual(["1001", "1002", "1003", "1004"]);
   });
 });
