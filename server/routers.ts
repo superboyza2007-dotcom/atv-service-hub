@@ -22,6 +22,7 @@ import {
   reportVehicleRepair,
 } from "./vehicleFlowService";
 import { completeNextActiveQueue, reconcileActiveQueue } from "./activeQueueMirror";
+import { getActiveQueueBridgeSnapshot } from "./activeSourceBridge";
 import { isRepairLogSheetConfigured, repairLogPayloadSchema, submitRepairLogSheetPayload } from "./repairLogGoogleSheets";
 import { cancelFutureDiceSession, chooseFutureDiceOutcome, createFutureDiceSession, getFutureDiceInvitationForUser, getFutureDiceSession, isFutureDiceRuleError, listFutureDiceSessions, rollFutureDice, setFutureDiceOutcomeType, type FutureDiceActor } from "./futureDiceService";
 
@@ -255,6 +256,9 @@ export const appRouter = router({
   operationalHistory: router({
     list: appProtectedProcedure.input(z.object({ limit: z.number().int().min(1).max(500).optional() }).optional()).query(({ input }) => listOperationalHistory(input?.limit ?? 200)),
     record: appProtectedProcedure.input(z.object({ eventType: z.string().trim().min(1).max(64), module: z.enum(["guide", "mechanic", "supervisor", "system"]), sessionId: z.number().int().positive().optional(), vehicleId: z.number().int().positive().optional(), payload: z.string().max(32_000) })).mutation(({ ctx, input }) => appendOperationalHistory({ ...input, actorDirectoryUserId: ctx.appUser?.id })),
+  }),
+  activeBridge: router({
+    snapshot: appProtectedProcedure.query(() => getActiveQueueBridgeSnapshot()),
   }),
   operationsSnapshots: router({
     get: appProtectedProcedure.input(z.object({ key: z.string().trim().min(1).max(64) })).query(async ({ input }) => (await getAppOperationsSnapshot(input.key)) ?? null),

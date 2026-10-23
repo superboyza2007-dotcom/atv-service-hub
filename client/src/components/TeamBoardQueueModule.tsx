@@ -2,10 +2,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Activity, ArrowRight, Check, ChevronRight, Clock3, ListFilter, LockKeyhole, Play, ShieldCheck, UserRound, UsersRound, X, Zap } from "lucide-react";
 import { completeRun, createQueueState, dispatch as engineDispatch, normalizeStandbyTeamPairs, planByRequiredUnits, type BoardMember, type QueueEvent, type QueueState } from "@/lib/team-board-queue-engine";
-import { expandActiveRunSelection, recordActive, recordActiveSessions, selectVisibleActiveRuns } from "@/lib/team-board-mirror-engine";
+import { completeSourceSessions, expandActiveRunSelection, recordActive, recordActiveSessions, selectVisibleActiveRuns } from "@/lib/team-board-mirror-engine";
 import { expiredLocalRunIds, runClock } from "@/lib/team-board-run-timing";
 import { trpc } from "@/lib/trpc";
-import { OPERATIONS_SNAPSHOT_KEYS, parseOperationsSnapshot, serializeOperationsSnapshot } from "@/lib/operations-snapshot";
+import { parseOperationsSnapshot, serializeOperationsSnapshot } from "@/lib/operations-snapshot";
 import { groupStandbyCardItems, mergeStandbyIdsPreservingQueue, selectStandbyCardItems, type RegistrationRow } from "@/lib/team-board-queue-view";
 import { dailyOperationalDateKey } from "@/lib/daily-active-timeline";
 type QueueMemberOption = { name: string; group?: string };
@@ -126,8 +126,9 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
   const [replayIndex, setReplayIndex] = useState(0);
   const [operationalDayKey, setOperationalDayKey] = useState(() => dailyOperationalDateKey(new Date()));
   const sharedQueueQuery = trpc.runQueue.get.useQuery(undefined, { retry: false, refetchInterval: 1000, enabled: true });
-  const guideSessionsSourceQuery = trpc.operationsSnapshots.get.useQuery({ key: OPERATIONS_SNAPSHOT_KEYS.guideSessions }, { retry: false, refetchInterval: 1000 });
-  const guideStateSourceQuery = trpc.operationsSnapshots.get.useQuery({ key: OPERATIONS_SNAPSHOT_KEYS.guideState }, { retry: false, refetchInterval: 1000 });
+  // Backend owns the 2.3 Active -> Run Queue source projection. The queue
+  // engine below remains the only owner of dispatch and ordering rules.
+  const activeBridgeQuery = trpc.activeBridge.snapshot.useQuery(undefined, { retry: false, refetchInterval: 1000 });
   const sharedQueueMutation = trpc.runQueue.save.useMutation({ onError: () => setQueueWarning("บันทึก Run Queue ลง Server ไม่สำเร็จ กรุณาลองใหม่") });
   const sharedQueueHydrated = useRef(false);
   const lastPersistedAt = useRef(0);
@@ -291,26 +292,16 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
 
   const state = engineState;
   const members = useMemo(() => state ? sortedMembers(state) : [], [state]);
-  const guideSessionSnapshot = parseOperationsSnapshot<{ sessions?: unknown[] }>(guideSessionsSourceQuery.data);
-  const guideStateSnapshot = parseOperationsSnapshot<{ members?: Array<{ id: string; name: string }> }>(guideStateSourceQuery.data);
-  const guideNamesById = new Map((guideStateSnapshot?.members ?? []).map((member) => [String(member.id), member.name]));
-  const sharedActiveGroups: ActiveSessionNameGroup[] = (guideSessionSnapshot?.sessions ?? []).flatMap((value) => {
-    if (!value || typeof value !== "object") return [];
-    const session = value as { sessionId?: unknown; status?: unknown; memberIds?: unknown; activeUserName?: unknown; startedAt?: unknown; durationMinutes?: unknown };
-    if (session.status !== "Active" || typeof session.sessionId !== "string") return [];
-    const memberNames = Array.isArray(session.memberIds)
-      ? session.memberIds.map((id) => guideNamesById.get(String(id))).filter((name): name is string => Boolean(name))
-      : [];
-    return [{
-      sessionId: session.sessionId,
-      memberNames,
-      ...(typeof session.activeUserName === "string" ? { activeUserName: session.activeUserName } : {}),
-      ...(typeof session.startedAt === "string" ? { startedAt: session.startedAt } : {}),
-      ...(typeof session.durationMinutes === "number" ? { durationMinutes: session.durationMinutes } : {}),
-    }];
-  });
+  const sharedActiveGroups: ActiveSessionNameGroup[] = (activeBridgeQuery.data?.sessions ?? []).map((session) => ({
+    sessionId: session.sessionId,
+    memberNames: session.memberNames,
+    ...(session.activeUserName ? { activeUserName: session.activeUserName } : {}),
+    ...(session.startedAt ? { startedAt: session.startedAt } : {}),
+    ...(typeof session.durationMinutes === "number" ? { durationMinutes: session.durationMinutes } : {}),
+  }));
+  const completedSourceSessionIds = activeBridgeQuery.data?.completedSessionIds ?? [];
   const sourceActiveGroups = Array.from(new Map([...sharedActiveGroups, ...(activeGroups ?? [])].map((group) => [group.sessionId, group])).values());
-  const hasSourceActiveInput = activeGroups !== undefined || guideSessionsSourceQuery.isSuccess;
+  const hasSourceActiveInput = activeGroups !== undefined || activeBridgeQuery.isSuccess;
   const sourceActiveNames = new Set(sourceActiveGroups.flatMap((group) => group.memberNames).map((name) => name.trim().toLocaleLowerCase("th-TH")).filter(Boolean));
   const sourceActiveIds = new Set(members.filter((member) => sourceActiveNames.has(member.name.trim().toLocaleLowerCase("th-TH"))).map((member) => member.id));
   const sourceActiveSessions = sourceActiveGroups.map((group) => ({
@@ -330,7 +321,7 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
   const pendingSourceRuns = engineActiveRuns.filter((run) => Boolean(run.sourceSessionId) && !sourceSessionIds.has(run.sourceSessionId!));
   const activeRunCount = activeRuns.length + sourceActiveGroups.length + pendingSourceRuns.length;
 
-  const atvMirrorKey = `${activeEventId}:${sourceActiveGroups.map((group) => `${group.sessionId}:${group.memberNames.map((name) => name.trim().toLocaleLowerCase("th-TH")).join(",")}:${group.startedAt ?? ""}:${group.durationMinutes ?? ""}`).join("|") || activeNames.map((name) => name.trim().toLocaleLowerCase("th-TH")).filter(Boolean).join("|")}`;
+  const atvMirrorKey = `${activeEventId}:${sourceActiveGroups.map((group) => `${group.sessionId}:${group.memberNames.map((name) => name.trim().toLocaleLowerCase("th-TH")).join(",")}:${group.startedAt ?? ""}:${group.durationMinutes ?? ""}`).join("|") || activeNames.map((name) => name.trim().toLocaleLowerCase("th-TH")).filter(Boolean).join("|")}:completed=${completedSourceSessionIds.join(",")}`;
   const atvMirrorRef = useRef("");
   useEffect(() => {
     if (!engineRef.current || atvMirrorRef.current === atvMirrorKey) return;
@@ -343,10 +334,24 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
       const result = recordActiveSessions(engineRef.current, { eventId: `2.3:${atvMirrorKey}`, sessions: sourceActiveSessions, now: Date.now() });
       atvMirrorRef.current = atvMirrorKey;
       if (!result.error && !result.ignored) {
-        engineRef.current = result.state;
-        setEngineState(result.state);
+        const completion = completeSourceSessions(result.state, completedSourceSessionIds, Date.now());
+        if (completion.error) {
+          setQueueWarning(completion.error);
+          return;
+        }
+        engineRef.current = completion.state;
+        setEngineState(completion.state);
         setQueueWarning(null);
-        setQueueReads((logs) => [`${new Date().toLocaleTimeString("th-TH")}  2.3_ACTIVE → เข้า Run Queue ตามกติกาเดิม ${sourceActiveSessions.length} รายการ`, ...logs].slice(0, 8));
+        setQueueReads((logs) => [`${new Date().toLocaleTimeString("th-TH")}  2.3_ACTIVE → เข้า Run Queue ${sourceActiveSessions.length} รายการ${completion.exitedRunIds?.length ? ` · Guide ยืนยันจบ ${completion.exitedRunIds.length} รายการ → คืนคิว` : ""}`, ...logs].slice(0, 8));
+      } else if (!result.error && result.ignored && completedSourceSessionIds.length) {
+        const completion = completeSourceSessions(engineRef.current, completedSourceSessionIds, Date.now());
+        if (completion.error) {
+          setQueueWarning(completion.error);
+          return;
+        }
+        engineRef.current = completion.state;
+        setEngineState(completion.state);
+        if (completion.exitedRunIds?.length) setQueueReads((logs) => [`${new Date().toLocaleTimeString("th-TH")}  GUIDE_COMPLETED → คืนคิว ${completion.exitedRunIds?.length ?? 0} รายการ`, ...logs].slice(0, 8));
       } else if (result.error) {
         setQueueWarning(result.error);
       }
@@ -361,7 +366,7 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
       engineRef.current = result.state;
       setEngineState(result.state);
     }
-  }, [activeNames, activeEventId, activeGroups, atvMirrorKey, duration, hasSourceActiveInput, members, sourceActiveGroups, sourceActiveSessions]);
+  }, [activeNames, activeEventId, activeGroups, atvMirrorKey, completedSourceSessionIds, duration, hasSourceActiveInput, members, sourceActiveGroups, sourceActiveSessions]);
 
   if (sharedQueueQuery.isError) return <div className="queue-shared-empty" role="alert">เชื่อมต่อ Run Queue บน Server ไม่ได้ กรุณาลองใหม่</div>;
   if (!sharedQueueHydrated.current) return <div className="queue-shared-empty" role="status">กำลังโหลด Run Queue จาก Server…</div>;

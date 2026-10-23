@@ -311,6 +311,35 @@ export function recordActiveSessions(inputState: QueueState, input: MirrorActive
   return { state: next, eventId, enteredIds, exitedRunIds };
 }
 
+/**
+ * Completes source runs only after Guide has persisted an explicit Completed
+ * status. A missing source snapshot alone must never call this function.
+ */
+export function completeSourceSessions(inputState: QueueState, sessionIds: string[], now = Date.now()): MirrorRecordResult {
+  const state = structuredClone(inputState);
+  const requested = new Set(unique(sessionIds));
+  if (!requested.size) return { state, enteredIds: [], exitedRunIds: [] };
+
+  let next = state;
+  const exitedRunIds: string[] = [];
+  for (const run of state.active.filter(candidate => candidate.sourceSessionId && requested.has(candidate.sourceSessionId))) {
+    const result = completeRun(next, run.id, now);
+    if (result.error) return { state, error: result.error };
+    next = result.state;
+    exitedRunIds.push(run.id);
+  }
+  if (exitedRunIds.length) {
+    next.events.unshift({
+      at: now,
+      code: "SOURCE_ACTIVE_COMPLETED",
+      message: `Guide 2.3 ยืนยันจบรายการ ${Array.from(requested).join(", ")} → คืนคิวตาม Complete lifecycle`,
+      memberIds: exitedRunIds,
+    });
+    next.events = next.events.slice(0, 100);
+  }
+  return { state: next, enteredIds: [], exitedRunIds };
+}
+
 /** Selects only non-source runs for the visible Active Zone when 2.3 is the source of truth. */
 export function selectVisibleActiveRuns(activeRuns: QueueState["active"], hasSourceActiveGroups: boolean): QueueState["active"] {
   if (!hasSourceActiveGroups) return activeRuns;

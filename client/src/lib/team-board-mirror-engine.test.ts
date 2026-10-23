@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createQueueState, dispatch as engineDispatch, type BoardMember } from "./team-board-queue-engine";
-import { recordActive, recordActiveSessions, restoreLegacyAtvMirrorRuns, selectVisibleActiveRuns } from "./team-board-mirror-engine";
+import { completeSourceSessions, recordActive, recordActiveSessions, restoreLegacyAtvMirrorRuns, selectVisibleActiveRuns } from "./team-board-mirror-engine";
 import { selectStandbyCardItems } from "./team-board-queue-view";
 
 const board: BoardMember[] = [
@@ -121,5 +121,35 @@ describe("Team Board external Active lifecycle", () => {
     expect(next.error).toBeUndefined();
     expect(next.state.active.map(run => run.sourceSessionId)).toEqual(["M3-001", "M3-002"]);
     expect(next.state.standby).toEqual(["queue-2"]);
+  });
+
+  it("completes a source run only after Guide sends explicit Completed", () => {
+    const started = recordActiveSessions(createQueueState(board), {
+      eventId: "2.3:active-explicit-completion",
+      sessions: [{ sessionId: "M3-001", memberIds: ["external-1"], startedAt: 100, durationSeconds: null }],
+      now: 100,
+    });
+    expect(started.error).toBeUndefined();
+    expect(started.state.active[0]?.sourceSessionId).toBe("M3-001");
+
+    const completed = completeSourceSessions(started.state, ["M3-001"], 200);
+    expect(completed.error).toBeUndefined();
+    expect(completed.exitedRunIds).toEqual(["AR-M3-001"]);
+    expect(completed.state.active).toEqual([]);
+    expect(completed.state.standby).toEqual(["queue-1", "queue-2", "external-1"]);
+    expect(completed.state.members["external-1"]?.rounds).toBe(0.5);
+    expect(completed.state.events[0]?.code).toBe("SOURCE_ACTIVE_COMPLETED");
+  });
+
+  it("does not complete a source run for an unrelated completed session", () => {
+    const started = recordActiveSessions(createQueueState(board), {
+      eventId: "2.3:active-unrelated-completion",
+      sessions: [{ sessionId: "M3-001", memberIds: ["external-1"], startedAt: 100, durationSeconds: null }],
+      now: 100,
+    });
+    const completed = completeSourceSessions(started.state, ["M3-999"], 200);
+    expect(completed.error).toBeUndefined();
+    expect(completed.exitedRunIds).toEqual([]);
+    expect(completed.state.active.map(run => run.sourceSessionId)).toEqual(["M3-001"]);
   });
 });
