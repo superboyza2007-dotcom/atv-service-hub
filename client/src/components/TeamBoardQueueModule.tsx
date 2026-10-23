@@ -638,7 +638,7 @@ function QueueDisplayBoard({ operatorName, members, state, standbyNames = [], da
     groups[slot] = [];
     return groups;
   }, {} as Record<typeof DAILY_SECTION_SLOTS[number], DailySessionRecord[]>);
-  dailySessions.filter((session) => session.status === "Active").forEach(session => {
+  dailySessions.filter((session) => session.status === "Active" || session.status === "Completed").forEach(session => {
     const startedAt = session.startedAt ? Date.parse(session.startedAt) : Number.NaN;
     if (Number.isFinite(startedAt)) dailySessionsBySlot[sectionForEvent(startedAt)].push(session);
   });
@@ -651,7 +651,7 @@ function QueueDisplayBoard({ operatorName, members, state, standbyNames = [], da
       return (left.status === "Active" ? 0 : 1) - (right.status === "Active" ? 0 : 1) || dueAt(left) - dueAt(right);
     });
   });
-  const activeDailySessions = DAILY_SECTION_SLOTS.flatMap((slot) => dailySessionsBySlot[slot]).sort((left, right) => {
+  const activeDailySessions = DAILY_SECTION_SLOTS.flatMap((slot) => dailySessionsBySlot[slot]).filter((session) => session.status === "Active").sort((left, right) => {
     const dueAt = (session: DailySessionRecord) => {
       const startedAt = session.startedAt ? Date.parse(session.startedAt) : Number.MAX_SAFE_INTEGER;
       return Number.isFinite(startedAt) ? startedAt + session.durationMinutes * 60_000 : Number.MAX_SAFE_INTEGER;
