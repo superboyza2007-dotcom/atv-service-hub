@@ -24,7 +24,7 @@ function getMapsConfig(): MapsConfig {
 
   if (!baseUrl || !apiKey) {
     throw new Error(
-      "Google Maps proxy credentials missing: set MANUS_API_URL and MANUS_API_KEY"
+      "Google Maps proxy credentials missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY"
     );
   }
 

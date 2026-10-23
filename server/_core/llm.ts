@@ -212,11 +212,12 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const platformApiBase = () => {
-  if (!ENV.forgeApiUrl.trim()) throw new Error("MANUS_API_URL is not configured");
-  return ENV.forgeApiUrl.replace(/\/$/, "");
+const resolveApiUrl = () => {
+  if (!ENV.forgeApiUrl || ENV.forgeApiUrl.trim().length === 0) {
+    throw new Error("MANUS_API_URL is not configured");
+  }
+  return `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`;
 };
-const resolveApiUrl = () => `${platformApiBase()}/v1/chat/completions`;
 
 const assertApiKey = () => {
   if (!ENV.forgeApiKey) {
@@ -341,6 +342,7 @@ const fetchWithBackoff = async (
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
+  resolveApiUrl();
   assertApiKey();
 
   const {
@@ -434,9 +436,13 @@ export type ModelsResponse = {
 };
 
 export async function listLLMModels(): Promise<ModelsResponse> {
+  const baseUrl = ENV.forgeApiUrl;
+  if (!baseUrl || baseUrl.trim().length === 0) {
+    throw new Error("MANUS_API_URL is not configured");
+  }
   assertApiKey();
 
-  const url = `${platformApiBase()}/v1/models`;
+  const url = `${baseUrl.replace(/\/$/, "")}/v1/models`;
 
   const response = await fetchWithBackoff(url, {
     headers: { authorization: `Bearer ${ENV.forgeApiKey}` },

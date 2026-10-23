@@ -1,24 +1,37 @@
 <!doctype html>
-<html lang="en">
-
+<!-- Operational dashboard: dark field-control visual system with ATV Signal Green for confirmed states. -->
+<html lang="th">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-    <title>ATV Service Hub</title>
-    <!-- THIS IS THE START OF A COMMENT BLOCK, BLOCK TO BE DELETED: Google Fonts here, example:
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>Guide Side — ATV Operations</title>
+    <link rel="icon" type="image/png" href="/manus-storage/guide-route-compass-mark_008ff91e.png" />
+    <meta name="theme-color" content="#080c0d" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    THIS IS THE END OF A COMMENT BLOCK, BLOCK TO BE DELETED -->
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet" />
   </head>
-
   <body>
     <div id="root"></div>
     <script src="/api/platform/config.js"></script>
+    <script>
+      (() => {
+        const config = window.__MANUS_CONFIG__;
+        if (!config?.analyticsEndpoint || !config.analyticsWebsiteId) return;
+        try {
+          const endpoint = new URL(config.analyticsEndpoint);
+          if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password) return;
+          const tracker = document.createElement("script");
+          tracker.defer = true;
+          const baseUrl = endpoint.href.endsWith("/") ? endpoint.href.slice(0, -1) : endpoint.href;
+          tracker.src = `${baseUrl}/umami`;
+          tracker.dataset.websiteId = config.analyticsWebsiteId;
+          document.head.appendChild(tracker);
+        } catch {
+          // Analytics is optional; an invalid endpoint must not block the application.
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
-
   </body>
-
 </html>

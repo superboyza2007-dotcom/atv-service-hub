@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS `users` (
-	`id` int AUTO_INCREMENT NOT NULL,
-	`openId` varchar(64) NOT NULL,
-	`name` text,
+		`id` int AUTO_INCREMENT NOT NULL,
+		`openId` varchar(64) NOT NULL,
+		`name` text,
 	`email` varchar(320),
 	`loginMethod` varchar(64),
 	`role` enum('user','admin') NOT NULL DEFAULT 'user',

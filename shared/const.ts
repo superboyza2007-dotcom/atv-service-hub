@@ -1,17 +1,16 @@
 export const COOKIE_NAME = "webdev_app_session";
+export const CRON_COOKIE_NAME = "app_session_id";
 export const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
 export const AXIOS_TIMEOUT_MS = 30_000;
 export const UNAUTHED_ERR_MSG = 'Please login (10001)';
 export const NOT_ADMIN_ERR_MSG = 'You do not have required permission (10002)';
 
-// One-time nonce cookie that binds an OAuth login to the browser that started
-// it. The `__Host-` prefix forces the cookie host-only (Secure, Path=/, no
-// Domain), so a sibling *.manus.space site cannot plant a matching value in a
-// victim's browser.
+// Server-issued, HttpOnly one-time nonce cookie binding an OAuth login to its
+// initiating browser session; application JavaScript cannot read or write it.
 export const OAUTH_STATE_COOKIE = "__Host-oauth_state";
 
 // `state` carries the callback redirect URI (used at token exchange) plus the
-// CSRF nonce. Defined here so the client encoder and server decoder never drift.
+// CSRF nonce. The server creates and validates both values.
 export type OAuthState = { redirectUri: string; nonce?: string };
 
 export const encodeOAuthState = (state: OAuthState): string =>
@@ -35,3 +34,7 @@ export const decodeOAuthState = (state: string): OAuthState => {
   }
   return { redirectUri: decoded };
 };
+
+
+export const SPECIAL_ACCESS_NAME = "ผู้ดูแลและพัฒนาระบบ";
+export const SPECIAL_ACCESS_GROUP = "ผู้ดูแลและพัฒนาระบบ";

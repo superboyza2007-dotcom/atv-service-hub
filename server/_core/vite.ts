@@ -60,11 +60,6 @@ export function serveStatic(app: Express) {
 
   app.use(express.static(distPath));
 
-  // the app's not-found page keeps a real 404 status for crawlers
-  app.get("/404", (_req, res) => {
-    res.status(404).sendFile(path.resolve(distPath, "index.html"));
-  });
-
   // fall through to index.html if the file doesn't exist
   app.use("*", (_req, res) => {
     res.sendFile(path.resolve(distPath, "index.html"));

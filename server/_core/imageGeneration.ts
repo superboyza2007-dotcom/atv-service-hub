@@ -15,13 +15,8 @@
  *     }]
  *   });
  */
-import { storagePut } from "../storage";
+import { storagePut } from "server/storage";
 import { ENV } from "./env";
-
-// Default model for generated sites. "MODEL_GPT_IMAGE_2" is the forge images.v1
-// enum for GPT Image 2 (id: gpt-image-2). If omitted, forge falls back to Gemini 2.5 Flash.
-const DEFAULT_IMAGE_MODEL = "MODEL_GPT_IMAGE_2";
-const DEFAULT_IMAGE_QUALITY = "medium";
 
 export type GenerateImageOptions = {
   prompt: string;
@@ -59,10 +54,6 @@ export async function generateImage(
     baseUrl
   ).toString();
 
-  const model = options.model ?? DEFAULT_IMAGE_MODEL;
-  const quality =
-    options.quality ?? (model === DEFAULT_IMAGE_MODEL ? DEFAULT_IMAGE_QUALITY : undefined);
-
   const response = await fetch(fullUrl, {
     method: "POST",
     headers: {
@@ -74,8 +65,8 @@ export async function generateImage(
     body: JSON.stringify({
       prompt: options.prompt,
       originalImages: options.originalImages || [],
-      model,
-      ...(quality ? { quality } : {}),
+      ...(options.model ? { model: options.model } : {}),
+      ...(options.quality ? { quality: options.quality } : {}),
     }),
   });
 
@@ -87,26 +78,32 @@ export async function generateImage(
   }
 
   const result = (await response.json()) as {
-    image?: { b64Json?: string; url?: string; mimeType?: string };
-    error?: unknown;
+    image: { b64Json?: string; mimeType?: string; url?: string };
   };
-  if (result.error || !result.image) throw new Error("Image service did not return an image");
   let buffer: Buffer;
+  let mimeType = result.image.mimeType || "image/png";
   if (result.image.b64Json) {
     buffer = Buffer.from(result.image.b64Json, "base64");
   } else if (result.image.url) {
-    const imageResponse = await fetch(result.image.url);
+    const imageUrl = new URL(result.image.url);
+    if (imageUrl.protocol !== "https:" || imageUrl.username || imageUrl.password) {
+      throw new Error("Image service returned an untrusted image URL");
+    }
+    const imageResponse = await fetch(imageUrl, { signal: AbortSignal.timeout(30_000) });
     if (!imageResponse.ok) throw new Error(`Image download failed (${imageResponse.status})`);
-    buffer = Buffer.from(await imageResponse.arrayBuffer());
+    const imageData = await imageResponse.arrayBuffer();
+    if (imageData.byteLength > 25 * 1024 * 1024) throw new Error("Generated image exceeded the 25 MiB limit");
+    buffer = Buffer.from(imageData);
+    mimeType = result.image.mimeType || imageResponse.headers.get("content-type")?.split(";")[0] || mimeType;
   } else {
-    throw new Error("Image service returned no downloadable bytes");
+    throw new Error("Image service returned neither image data nor a URL");
   }
 
   // Save to S3
   const { url } = await storagePut(
     `generated/${Date.now()}.png`,
     buffer,
-    result.image.mimeType
+    mimeType
   );
   return {
     url,
@@ -114,7 +111,7 @@ export async function generateImage(
 }
 
 export type ImageModelInfo = {
-  /** Forge model enum, e.g. "MODEL_GPT_IMAGE_2". Pass into generateImage({ model }). */
+  /** Image model enum returned by ListImageModels. */
   model?: string;
   /** Stable model id, e.g. "gpt-image-2". */
   id?: string;

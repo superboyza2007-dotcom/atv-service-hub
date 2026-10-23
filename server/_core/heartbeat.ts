@@ -6,7 +6,7 @@ export type HeartbeatJob = {
   /**
    * 6-field cron with seconds (`sec min hour dom mon dow`), UTC, min interval 60s.
    * Use `0` for the seconds field — e.g. `"0 0 9 * * *"` is daily 09:00 UTC.
-   * See the Webdev skill references/scheduled-work.md.
+   * See /home/ubuntu/skills/webdev-periodic-updates/SKILL.md.
    */
   cron: string;
   /** Callback path. MUST start with `/api/scheduled/`. */
@@ -72,7 +72,7 @@ const callForge = async <T>(
     "content-type": "application/json",
     "connect-protocol-version": "1",
   };
-  // userSession is the decoded application session token (NOT the raw
+  // userSession is the decoded `app_session_id` cookie value (NOT the raw
   // Cookie header). Empty string falls back to the project owner identity.
   if (userSession) {
     headers["x-manus-user-session"] = userSession;

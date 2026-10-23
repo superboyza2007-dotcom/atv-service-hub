@@ -93,6 +93,5 @@ export async function storageGetSignedUrl(relKey: string): Promise<string> {
   }
 
   const { url } = (await resp.json()) as { url: string };
-  if (!url) throw new Error("Storage did not return a download URL");
   return url;
 }

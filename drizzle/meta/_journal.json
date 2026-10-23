@@ -5,8 +5,36 @@
     {
       "idx": 0,
       "version": "5",
-      "when": 1788785580464,
-      "tag": "0000_initial_users",
+      "when": 1790551464678,
+      "tag": "0000_ancient_callisto",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1790553845835,
+      "tag": "0001_greedy_gorgon",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1790557000000,
+      "tag": "0002_repair_ready_transition",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1790558400000,
+      "tag": "0003_server_authoritative_future_dice",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1792140000000,
+      "tag": "0004_dice_mini_integration",
       "breakpoints": true
     }
   ]

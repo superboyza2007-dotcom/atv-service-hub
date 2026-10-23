@@ -15,73 +15,6 @@
   // Prevent double initialization
   if (window.__MANUS_DEBUG_COLLECTOR__) return;
 
-  // The external Preview Runtime may arrive after application startup. Keep
-  // errors separate from the normal log queue until its ErrorCatcher takes over.
-  try {
-    window.__MANUS_RUNTIME_EARLY_ERRORS__ = [];
-    var runtime = window.ManusWebEditRuntime;
-    if (runtime && typeof runtime.getState === "function" && runtime.getState().mounted) {
-      delete window.__MANUS_RUNTIME_EARLY_ERRORS__;
-    }
-  } catch {
-    // An unavailable Runtime must not prevent the existing collector from loading.
-  }
-
-  function captureEarlyError(from, message, callStack, timestamp) {
-    try {
-      var errors = window.__MANUS_RUNTIME_EARLY_ERRORS__;
-      // Runtime deletes this handoff after installing its own listeners.
-      if (!Array.isArray(errors) || errors.length >= 50) return;
-      errors.push({
-        from: from,
-        message: String(message || "Unknown error").slice(0, 4096),
-        callStack: String(callStack || "").slice(0, 8192),
-        time: new Date(timestamp).toISOString(),
-        timeZone: String(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC").slice(0, 128),
-      });
-    } catch {
-      // Capturing a diagnostic must never break the original console/error path.
-    }
-  }
-
-  function captureEarlyConsoleError(args, timestamp, fallbackStack) {
-    try {
-      var errors = window.__MANUS_RUNTIME_EARLY_ERRORS__;
-      if (!Array.isArray(errors) || errors.length >= 50) return;
-      var message = "";
-      var callStack = "";
-      var stringFormat = typeof args[0] === "string";
-      var argIndex = stringFormat ? 1 : 0;
-      // Match Runtime's console formatting before the log serializer turns
-      // numbers into strings and Error objects into plain records.
-      if (stringFormat) {
-        message = args[0].replace(/%[sdj%]/g, function (match) {
-          if (match === "%%") return "%";
-          if (argIndex >= args.length) return match;
-          var arg = args[argIndex++];
-          if (match === "%s") return String(arg);
-          if (match === "%d") return String(Number(arg));
-          try {
-            return JSON.stringify(arg);
-          } catch {
-            return "[Circular]";
-          }
-        });
-      }
-      for (; argIndex < args.length; argIndex++) {
-        var arg = args[argIndex];
-        if (arg instanceof Error) {
-          callStack = callStack || arg.stack || "";
-          arg = arg.message;
-        }
-        message += (stringFormat || message ? " " : "") + String(arg);
-      }
-      captureEarlyError("console", message.trim(), callStack || fallbackStack, timestamp);
-    } catch {
-      // Preserve console.error even for arguments with unusual string conversion.
-    }
-  }
-
   // ==========================================================================
   // Configuration
   // ==========================================================================
@@ -461,18 +394,13 @@
       store.consoleLogs.push(entry);
       pruneBuffer(store.consoleLogs, CONFIG.bufferSize.console);
 
-      if (method === "error") {
-        captureEarlyConsoleError(args, entry.timestamp, entry.stack);
-      }
-
       originalConsole[method].apply(console, args);
     };
   });
 
   window.addEventListener("error", function (event) {
-    var timestamp = Date.now();
     store.consoleLogs.push({
-      timestamp: timestamp,
+      timestamp: Date.now(),
       level: "ERROR",
       args: [
         {
@@ -487,12 +415,6 @@
       stack: event.error ? event.error.stack : null,
     });
     pruneBuffer(store.consoleLogs, CONFIG.bufferSize.console);
-    captureEarlyError(
-      "window",
-      event.message,
-      event.error && event.error.stack || "at " + event.filename + ":" + event.lineno + ":" + event.colno,
-      timestamp
-    );
 
     // Mark an error moment in UI event stream for agents
     logUiEvent("error", {
