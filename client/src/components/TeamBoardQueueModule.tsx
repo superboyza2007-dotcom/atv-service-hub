@@ -370,7 +370,7 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
 
   if (sharedQueueQuery.isError) return <div className="queue-shared-empty" role="alert">เชื่อมต่อ Run Queue บน Server ไม่ได้ กรุณาลองใหม่</div>;
   if (!sharedQueueHydrated.current) return <div className="queue-shared-empty" role="status">กำลังโหลด Run Queue จาก Server…</div>;
-  if (readOnly) return state ? <QueueDisplayBoard operatorName={operatorName} members={members} state={visibleQueueState ?? state} dailySessions={dailySessions} onDailySessionOpen={onDailySessionOpen} onNavigate={() => undefined} /> : <div className="queue-shared-empty">ยังไม่มีข้อมูล Shared Run Queue</div>;
+  if (readOnly) return state ? <QueueDisplayBoard operatorName={operatorName} members={members} state={visibleQueueState ?? state} standbyNames={standbyNames} dailySessions={dailySessions} onDailySessionOpen={onDailySessionOpen} onNavigate={() => undefined} /> : <div className="queue-shared-empty">ยังไม่มีข้อมูล Shared Run Queue</div>;
   const available = members.filter((member) => !member.isShadow && (mirrorMode || (state?.standby.includes(member.id) && !activeIds.has(member.id))));
   const dispatchSelected = () => {
     const base = engineRef.current;
@@ -459,7 +459,7 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
 
   if (screen === "register") return <Registration operatorName={operatorName} rows={rows} updateRow={updateRow} addRow={addRow} onSubmit={submitBoard} onBack={openProtectedQueue} hasSubmitted={Boolean(state)} options={memberOptions} />;
   if (!state) return null;
-  if (screen === "queue") return <QueueDisplayBoard operatorName={operatorName} members={members} state={visibleQueueState ?? state} dailySessions={dailySessions} onDailySessionOpen={onDailySessionOpen} onNavigate={setScreen} />;
+  if (screen === "queue") return <QueueDisplayBoard operatorName={operatorName} members={members} state={visibleQueueState ?? state} standbyNames={standbyNames} dailySessions={dailySessions} onDailySessionOpen={onDailySessionOpen} onNavigate={setScreen} />;
   if (screen === "events") return <div className="app-shell"><aside className="sidebar"><div className="brand"><div className="brand-mark" aria-label="queue slot mark"><span>[[</span><i /><span>]]</span></div><div><strong>team board</strong><span>engine event ledger</span></div></div><div className="sidebar-kicker">STEP 03 / EVENT LOG</div><nav className="nav-list"><button className="nav-item" onClick={() => setScreen("dashboard")}><Activity size={17} />Dashboard<span className="nav-count">05</span></button><button className="nav-item" onClick={openProtectedQueue}><ListFilter size={17} />{secretUnlocked ? "กระดาน Active" : "คิวตั้งต้น"}<span className="nav-count">{state.standby.length}</span></button><button className="nav-item" onClick={() => openRegistration()}><UsersRound size={17} />แก้คิวตั้งต้น<span className="nav-count">{members.length}</span></button><button className="nav-item active" onClick={() => setScreen("events")}><Clock3 size={17} />Event log<span className="nav-count">{state.events.length}</span></button></nav><div className="sidebar-bottom"><div className="system-status"><span className="pulse-dot" />Engine event ledger<span>engine v1</span></div><div className="side-note"><LockKeyhole size={15} />ตรวจ transition แบบ step-by-step</div></div></aside><main className="main-canvas event-page"><header className="topbar"><div><div className="eyebrow"><span className="live-dot" />ENGINE EVENT LEDGER</div><h1>ลำดับเหตุการณ์ของ Engine</h1><p>เลือกแต่ละ transition เพื่อ audit การเปลี่ยนสถานะและลำดับคิว</p></div><div className="header-actions"><button className="clear-button" onClick={() => setScreen("dashboard")}>กลับ Dashboard</button></div></header><EventLog events={state.events} replayIndex={replayIndex} onReplay={setReplayIndex} /></main></div>;
 
   const standbyCard = selectStandbyCardItems(visibleQueueState ?? state);
@@ -467,7 +467,7 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
   const floatingCard = members.filter((member) => !member.isShadow && member.role === "floating");
   const qCard = members.filter((member) => !member.isShadow && (member.role === "ql" || member.role === "qf"));
 
-  if (screen === "dashboard" && !secretUnlocked) return <QueueDisplayBoard operatorName={operatorName} members={members} state={visibleQueueState ?? state} dailySessions={dailySessions} onDailySessionOpen={onDailySessionOpen} onNavigate={(target) => { if (target === "dashboard") setSecretUnlocked(true); setScreen(target); }} />;
+  if (screen === "dashboard" && !secretUnlocked) return <QueueDisplayBoard operatorName={operatorName} members={members} state={visibleQueueState ?? state} standbyNames={standbyNames} dailySessions={dailySessions} onDailySessionOpen={onDailySessionOpen} onNavigate={(target) => { if (target === "dashboard") setSecretUnlocked(true); setScreen(target); }} />;
 
   return <div className={`app-shell ${secretUnlocked ? "restricted-mode" : ""}`}><aside className="sidebar"><div className="brand"><div className="brand-mark" aria-label="queue slot mark"><span>[[</span><i /><span>]]</span></div><div><strong>team board</strong><span>daily registered guides</span></div></div><div className="sidebar-kicker">STEP 02 / RUN QUEUE</div><nav className="nav-list"><button className="nav-item active" onClick={() => setScreen("dashboard")}><Activity size={17} />Dashboard<span className="nav-count">05</span></button><button className="nav-item" onClick={openProtectedQueue}><ListFilter size={17} />คิวตั้งต้น<span className="nav-count">{state.standby.length}</span></button><button className="nav-item" onClick={() => openRegistration()}><UsersRound size={17} />แก้คิวตั้งต้น<span className="nav-count">{members.length}</span></button><button className="nav-item" onClick={() => setScreen("events")}><Clock3 size={17} />Event log<span className="nav-count">{state.events.length}</span></button></nav><div className="sidebar-bottom"><div className="system-status"><span className="pulse-dot" />Simulation mode<span>engine v1</span></div><div className="side-note"><LockKeyhole size={15} />ข้อมูลมาจากช่องกรอกเท่านั้น</div></div></aside><main className="main-canvas"><div className="run-queue-toolbar"><button className="clear-button" onClick={openProtectedQueue}><ListFilter size={15} />กลับคิวตั้งต้น</button><button className="dispatch-button reset-run-button" onClick={resetRunQueue}>↻ ล้างประวัติรันคิวใหม่</button></div><section className="cards-grid"><BoardCard index="02" title="คิว Standby หลัก" subtitle="ลำดับรันของ Te / Dp / Wk" items={standbyCard} empty="ไม่มีสมาชิกใน Standby" groupTeams /><div className="status-cards-row"><BoardCard index="03" title="สถานะ Dp / Drop List" subtitle="ยังอยู่ใน Standby และนับรอบคู่" items={dpCard} empty="ยังไม่มี Dp" showRounds compact /><BoardCard index="04" title="ตัวลอย ^" subtitle="สถานะรายบุคคล: ว่าง / กำลังทำงาน" items={floatingCard} empty="ไม่มีตัวลอย" showFloatingState activeIds={activeIds} compact /><BoardCard index="05" title="สถานะ QL & QF" subtitle="แสดงคู่เดียวกันพร้อมบทบาทคิวหลัก / คิวรอง" items={qCard} empty="ยังไม่มี QL หรือ QF" groupQv compact /></div></section><div className="workspace-grid"><section className={`panel active-panel ${secretUnlocked ? "" : "secure-feature-hidden"}`}><div className="panel-heading"><div><div className="section-index">06 / ACTIVE ZONE</div><h2>รายการที่กำลังทำงาน</h2></div><span className="badge badge-teal"><span className="pulse-dot small" />{activeRunCount} runs</span></div>{activeRunCount === 0 ? <div className="empty-state"><div className="empty-mark"><Zap size={23} /></div><strong>ยังไม่มีรายการ Active</strong><span>รายการจะแสดงตามสถานะจริงใน 2.3 Active</span></div> : <div className="active-list">{sourceActiveGroups.map((group) => <SourceActiveCard key={group.sessionId} group={group} members={members} onComplete={() => engineActiveRuns.find((run) => run.sourceSessionId === group.sessionId) && complete(engineActiveRuns.find((run) => run.sourceSessionId === group.sessionId)!.id)} />)}{pendingSourceRuns.map((run) => <ActiveCard key={run.id} run={run} state={state} duration={duration} sourceEnded onComplete={() => complete(run.id)} />)}{activeRuns.map((run) => <ActiveCard key={run.id} run={run} state={state} duration={duration} onComplete={() => complete(run.id)} />)}</div>}</section><section className={`panel directory-panel ${secretUnlocked ? "" : "secure-feature-hidden"}`} id="board"><div className="panel-heading"><div><div className="section-index">07 / STANDBY SELECTOR</div><h2>{mirrorMode ? "คืนคิวจากรายการ Active" : "สั่งรันคิวตามจำนวนทีม"}</h2></div><span className={`count-chip ${mirrorMode ? "mirror-chip" : "command-chip"}`}>{mirrorMode ? "ACTIVE RETURN" : `${commandUnits} ทีม`}</span></div><div className="duration-selector" aria-label="เลือกเวลาโปรแกรม"><div className="duration-selector-label"><Clock3 size={14} /><span>เวลาโปรแกรม</span><strong>{duration === null ? "ไม่จำกัด" : `${duration} วินาที`}</strong></div><div className="duration-options">{durationOptions.map((seconds) => <button type="button" key={seconds ?? "unlimited"} className={`duration-option ${duration === seconds ? "active" : ""}`} onClick={() => setDuration(seconds)}>{seconds === null ? "ไม่จำกัด" : `${seconds} วิ`}</button>)}</div></div><div className="mode-switch command-route-switch" aria-label="เลือกฟังก์ชันการทำงาน"><button type="button" className={`mode-button command-route-button ${mirrorMode ? "active" : ""}`} onClick={() => { setMirrorMode(true); setSelected([]); }}><ShieldCheck size={14} /><span><strong>Active Return</strong><small>คืนคิวจากรายการ Active</small></span></button><button type="button" className={`mode-button command-route-button ${!mirrorMode ? "active" : ""}`} onClick={() => { setMirrorMode(false); setSelected([]); }}><Play size={14} /><span><strong>Command Dispatch</strong><small>สั่งรันจากจำนวนทีม</small></span></button></div>{queueWarning && !mirrorMode && <div className="queue-warning" role="alert"><strong>ตรวจพบความไม่สอดคล้อง</strong><span>{queueWarning}</span></div>}{mirrorMode ? <><div className="mirror-event-field"><label>eventId สำหรับคืนคิว</label><input value={mirrorEventId} onChange={(event) => setMirrorEventId(event.target.value)} placeholder="เช่น board-2026-08-17-001" /><span>รายการซ้ำจะถูก ignore ไม่ dispatch ซ้ำ</span></div><div className="directory-list">{available.map((member) => <button className={`member-row ${selected.includes(member.id) ? "selected" : ""}`} key={member.id} onClick={() => setSelected((current) => current.includes(member.id) ? current.filter((id) => id !== member.id) : [...current, member.id])}><span className={`checkbox ${selected.includes(member.id) ? "checked" : ""}`}>{selected.includes(member.id) && <Check size={13} />}</span><TeamAvatar member={member} /><span className="member-copy"><strong className={member.isShadow ? "shadow-name" : ""}>{member.name}</strong><span>{member.isShadow ? "แสดงผลเท่านั้น · ไม่คำนวณ" : `${member.shift} · ${member.rounds} rounds`}</span></span><span className="state-tag state-standby">{roleLabel[member.role]}</span></button>)}</div><div className="directory-footer"><span><UserRound size={15} /> {members.length} คนจาก Daily Board</span><button className="clear-button" onClick={() => setSelected([])}>Clear selection</button></div><div className="selector-controls"><button className="dispatch-button" onClick={recordSelectedActive}><ShieldCheck size={15} />ส่งรายการ Active เพื่อคืนคิว</button></div></> : <><div className="panel-heading"><div><div className="section-index">06 / COMMAND DISPATCH</div><h2>สั่งรันคิวตามจำนวนทีม</h2><span className="card-subtitle">คำนวณจากคำสั่งนี้ ไม่อ่านรายการ Active เพื่อ dispatch</span></div><span className="count-chip command-chip">{commandUnits} ทีม</span></div><div className="command-form"><label><span>จำนวนคำสั่งทีม</span><input aria-label="จำนวนคำสั่งทีม" type="number" min="0.5" max="5.5" step="0.5" list="queue-unit-presets" value={commandUnits} onChange={(event) => setCommandUnits(event.target.value)} /><datalist id="queue-unit-presets"><option value="0.5" /><option value="1" /><option value="1.5" /><option value="2" /><option value="2.5" /><option value="3" /><option value="3.5" /><option value="4" /><option value="4.5" /><option value="5" /><option value="5.5" /></datalist></label><div className="command-presets" aria-label="ตัวเลือกจำนวนทีม">{[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5].map((units) => <button type="button" className={`command-preset ${commandUnits === String(units) ? "active" : ""}`} key={units} onClick={() => setCommandUnits(String(units))}>{units.toFixed(1)}</button>)}</div><button className="dispatch-button command-submit" onClick={runQueue}><Play size={15} />ส่งคำสั่งรันคิว</button></div><div className="command-note"><span>กฎเดิมยังทำงานครบ</span><small>Dp → ตัวลอย ^ → Split · ส่วน Active ใช้สำหรับคืนคิวผ่าน Active Return</small></div></>}</section></div></main></div>;
 }
@@ -574,16 +574,14 @@ function ActiveCard({ run, state, duration, onComplete, sourceEnded = false }: {
 
 function DailySessionCard({ session, onOpen }: { session: DailySessionRecord; onOpen?: (sessionId: string) => void }) {
   const names = session.memberNames.filter(Boolean).join(" · ") || session.activeUserName || "ไม่ระบุผู้ปฏิบัติงาน";
-  const vehicles = session.vehicleNumbers.filter(Boolean).map(number => `#${number}`).join(" · ");
   const isLive = session.status === "Active";
   return <button type="button" className={`queue-display-daily-session ${isLive ? "is-live" : "is-completed"}`} onClick={() => onOpen?.(session.sessionId)} aria-label={`เปิดรายละเอียด ${names}`}>
-    <span className="queue-display-daily-session-head"><strong>{names}</strong>{isLive ? <em><i /> LIVE</em> : <em>จบแล้ว</em>}</span>
-    <span>โปรแกรม {session.durationMinutes} นาที · R {session.riderCount} · P {session.passengerCount}</span>
-    <small>{vehicles || "ยังไม่ระบุรถ"} · {session.sessionId}</small>
+    <strong className="queue-display-daily-session-names">{names}</strong>
+    <span className="queue-display-daily-session-meta">{session.durationMinutes} / R {session.riderCount} P {session.passengerCount} / {isLive ? "สด" : "จบแล้ว"}</span>
   </button>;
 }
 
-function QueueDisplayBoard({ operatorName, members, state, dailySessions = [], onDailySessionOpen, onNavigate }: { operatorName: string; members: BoardMember[]; state: QueueState; dailySessions?: DailySessionRecord[]; onDailySessionOpen?: (sessionId: string) => void; onNavigate: (screen: "register" | "dashboard" | "queue" | "events") => void }) {
+function QueueDisplayBoard({ operatorName, members, state, standbyNames = [], dailySessions = [], onDailySessionOpen, onNavigate }: { operatorName: string; members: BoardMember[]; state: QueueState; standbyNames?: string[]; dailySessions?: DailySessionRecord[]; onDailySessionOpen?: (sessionId: string) => void; onNavigate: (screen: "register" | "dashboard" | "queue" | "events") => void }) {
   const [now, setNow] = useState(() => new Date());
   const [selectedSection, setSelectedSection] = useState<(typeof DAILY_SECTION_SLOTS)[number] | null>(null);
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 1000); return () => window.clearInterval(timer); }, []);
@@ -595,6 +593,15 @@ function QueueDisplayBoard({ operatorName, members, state, dailySessions = [], o
     .filter((member): member is BoardMember => Boolean(member));
   const primaryGroups = groupStandbyCardItems(selectStandbyCardItems(state));
   const activeIds = new Set(state.active.flatMap((run) => run.memberIds));
+  const queuePosition = new Map(state.standby.map((id, index) => [id, index + 1]));
+  const normalizeName = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase("th-TH");
+  const dailyStandbyNames = new Set([
+    ...(standbyNames ?? []),
+    ...dailySessions.filter((session) => session.status === "Standby").flatMap((session) => session.memberNames),
+  ].filter(Boolean).map(normalizeName));
+  const operatorMember = members.find((member) => normalizeName(member.name) === normalizeName(operatorName));
+  const operatorQueuePosition = operatorMember ? queuePosition.get(operatorMember.id) : undefined;
+  const operatorRole = operatorMember && !operatorMember.isShadow ? roleLabel[operatorMember.role] : "—";
   // QL/QF leave Standby while airborne/Active, so mirror the Dashboard card
   // from the full roster rather than only state.standby.
   const ql = members.filter((member) => !member.isShadow && member.role === "ql");
@@ -620,6 +627,15 @@ function QueueDisplayBoard({ operatorName, members, state, dailySessions = [], o
     const startedAt = session.startedAt ? Date.parse(session.startedAt) : Number.NaN;
     if (Number.isFinite(startedAt)) dailySessionsBySlot[sectionForEvent(startedAt)].push(session);
   });
+  DAILY_SECTION_SLOTS.forEach((slot) => {
+    dailySessionsBySlot[slot].sort((left, right) => {
+      const dueAt = (session: DailySessionRecord) => {
+        const startedAt = session.startedAt ? Date.parse(session.startedAt) : Number.MAX_SAFE_INTEGER;
+        return Number.isFinite(startedAt) ? startedAt + session.durationMinutes * 60_000 : Number.MAX_SAFE_INTEGER;
+      };
+      return (left.status === "Active" ? 0 : 1) - (right.status === "Active" ? 0 : 1) || dueAt(left) - dueAt(right);
+    });
+  });
   const todayKey = dailyOperationalDateKey(now);
   const operationalDate = new Date(`${todayKey}T00:00:00+07:00`);
   const eventsForToday = state.events.filter((event) => dailyOperationalDateKey(new Date(event.at)) === todayKey);
@@ -639,7 +655,7 @@ function QueueDisplayBoard({ operatorName, members, state, dailySessions = [], o
         <section className="queue-display-table-wrap">
           <div className="queue-display-table">
             <div className="queue-display-head">
-              <div>คิวที่ 3 <small>(Te)</small></div>
+              <div>คิวที่ {operatorQueuePosition ?? "—"} <small>({operatorRole})</small></div>
               <div className="queue-display-system">ชื่อผู้เข้าใช้งานระบบ<small>{operatorName}</small></div>
               <div>{now.toLocaleDateString("th-TH", { weekday: "long" })}</div>
               <div>(เวลาปัจจุบัน)<strong>{now.toLocaleTimeString("th-TH", { hour12: false })}</strong></div>
@@ -651,14 +667,19 @@ function QueueDisplayBoard({ operatorName, members, state, dailySessions = [], o
             <div className="queue-display-body">
               <div className="queue-display-left">
                 <div className="queue-display-primary-list">
-                  {rows.map(({ group, groupIndex, pair }) => {
+                  {rows.map(({ pair }) => {
                     const [left, right] = pair;
                     const key = pair.map((member) => member?.id ?? "empty").join("-");
-                    const teamLabel = `TEAM ${String(groupIndex + 1).padStart(2, "0")} · Te คู่`;
-                    const individualLabel = (member: BoardMember) => member.isShadow ? "SHADOW" : `INDIVIDUAL · ${roleLabel[member.role]}`;
+                    const renderQueueCell = (member: BoardMember | undefined) => {
+                      if (!member) return null;
+                      const position = queuePosition.get(member.id);
+                      const label = member.isShadow ? "SHADOW" : `คิว ${position ?? "—"} · ${roleLabel[member.role]}`;
+                      const highlighted = dailyStandbyNames.has(normalizeName(member.name));
+                      return <div className={highlighted ? "is-daily-standby" : undefined}><div className="queue-display-member-copy"><b>{member.name}</b><small>{label}</small></div></div>;
+                    };
                     return <div className="queue-display-pair" key={key}>
-                      <div>{left && <><small>{group.length > 1 ? teamLabel : individualLabel(left)}</small><b>{left.name}</b></>}</div>
-                      <div>{right && <><small>{roleLabel[right.role]}</small><b>{right.name}</b></>}</div>
+                      {renderQueueCell(left)}
+                      {renderQueueCell(right)}
                     </div>;
                   })}
                 </div>
