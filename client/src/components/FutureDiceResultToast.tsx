@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import "./FutureDiceResultToast.css";
 
-const RESULT_PREFIX = "ผล Future Dice #";
+function isDiceResult(body: string) {
+  return body.startsWith("ผู้ชนะ:") && body.includes("ผู้แพ้:") && body.includes("ผู้ชนะเลือก:");
+}
 
 export default function FutureDiceResultToast() {
   const messagesQuery = trpc.liveMessages.list.useQuery(
@@ -15,7 +17,7 @@ export default function FutureDiceResultToast() {
     return () => window.clearInterval(timer);
   }, []);
   const latestResult = useMemo(() => (messagesQuery.data ?? [])
-    .filter(message => message.body.startsWith(RESULT_PREFIX))
+    .filter(message => isDiceResult(message.body))
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0], [messagesQuery.data]);
   if (!latestResult) return null;
   const ageMs = now - new Date(latestResult.createdAt).getTime();
