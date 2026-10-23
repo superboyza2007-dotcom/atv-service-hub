@@ -379,6 +379,7 @@ export default function SupervisorModule() {
   }, [snapshot.directoryUsers, snapshot.guideState.members]);
   const guideActiveSessions = useMemo(() => guideSessions.filter(session => session.status === "Active"), [guideSessions]);
   const guideStandbySessions = useMemo(() => guideSessions.filter(session => session.status === "Standby"), [guideSessions]);
+  const dailyActiveTimeline = useMemo(() => buildDailyActiveTimeline(guideSessions), [guideSessions]);
   // This model is the same live plug consumed by Supervisor > Database > Users,
   // the Supervisor homepage card, and the shared inner Group View door.
   const supervisorStatusModel = canonicalSupervisorStatusModel;
@@ -767,9 +768,24 @@ export default function SupervisorModule() {
   };
   const supervisorGuideDashboard = <SupervisorDashboard vehicles={vehicles} safetyNotices={safetyNotices} statusModel={supervisorStatusModel} activeSessions={guideActiveSessions} standbySessions={guideStandbySessions} members={guideMembers} now={now} notice={notice} onOpenSession={openGuideSession} onOpenQueue={() => { setNotice(""); setShowSupervisorStandbyCreator(true); }} onRefresh={() => { void fleetSnapshotQuery.refetch(); void guideSessionsQuery.refetch(); void guideStateQuery.refetch(); void vehicleFlowSnapshotQuery.refetch(); void directoryQuery.refetch(); }} onOpenStatusView={() => setTab("status")} />;
   const supervisorQueuePayoutTabs = <nav className="m3-daily-tabs m3-alert-tabs" aria-label="เมนูหน้าคิวและตารางค่ารอบ"><button type="button" className={queuePayoutView === "daily" ? "selected" : ""} onClick={() => setQueuePayoutView("daily")}><CalendarDays size={15} /><span>บอร์ดบันทึกรายวัน</span></button><button type="button" className={queuePayoutView === "payout" ? "selected" : ""} onClick={() => setQueuePayoutView("payout")}><Settings2 size={15} /><span>ตารางค่ารอบ</span></button><button type="button" className={queuePayoutView === "future" ? "selected" : ""} onClick={() => { setQueuePayoutView("future"); openFutureDiceApp(); }}><Dices size={15} /><span>ทอยเต๋า</span></button></nav>;
-  const supervisorGuideDailyBoard = <><div className="supervisor-queue-hub-heading"><p>QUEUE / DAILY BOARD</p><h2>บอร์ดบันทึกรายวัน</h2><span>คิวตั้งต้นชุดเดียวกับ Guide</span></div><section aria-label="บอร์ดบันทึกรายวัน"><TeamBoardQueueModule
+  const atvStandbyRoster = Array.from(new Set(guideStandbySessions.flatMap(session => session.memberIds.map(memberId => guideMembers.find(member => member.id === memberId)?.name).filter((name): name is string => Boolean(name)))));
+  const atvQueueRoster = Array.from(new Set([...atvStandbyRoster, ...guideActiveSessions.flatMap(session => session.memberIds.map(memberId => guideMembers.find(member => member.id === memberId)?.name).filter((name): name is string => Boolean(name)))]));
+  const supervisorDailyBoardSessions = dailyActiveTimeline.map(session => ({
+    sessionId: session.sessionId,
+    status: (session.status === "Active" || session.status === "TIME_EXPIRED" ? "Active" : session.status === "Completed" ? "Completed" : "Standby") as "Active" | "Completed" | "Standby",
+    durationMinutes: session.durationMinutes,
+    vehicleNumbers: session.vehicleIds.map(id => id.replace(/^m3-v/, "")).filter(Boolean),
+    memberNames: session.memberIds.map(memberId => guideMembers.find(member => member.id === memberId)?.name).filter((name): name is string => Boolean(name)),
+    activeUserName: session.activeUserName,
+    riderCount: session.riderCount,
+    passengerCount: session.passengerCount,
+    startedAt: session.startedAt,
+    completedAt: session.completedAt,
+  }));
+  const supervisorGuideDailyBoard = <section aria-label="บอร์ดบันทึกรายวัน"><TeamBoardQueueModule
     operatorName={currentSupervisorActor.name}
-    rosterNames={Array.from(new Set([...guideActiveSessions, ...guideStandbySessions].flatMap(session => session.memberIds.map(memberId => guideMembers.find(member => member.id === memberId)?.name).filter((name): name is string => Boolean(name)))))}
+    rosterNames={atvQueueRoster}
+    standbyNames={atvStandbyRoster}
     memberOptions={snapshot.directoryUsers.filter(user => /ไกด์|ช่าง|guide|mechanic/i.test(user.group ?? "")).map(user => ({ name: user.name, group: user.group }))}
     activeGroups={guideActiveSessions.map(session => ({
       sessionId: session.sessionId,
@@ -778,7 +794,10 @@ export default function SupervisorModule() {
       startedAt: session.startedAt,
       durationMinutes: session.durationMinutes,
     }))}
-  /></section></>;
+    dailySessions={supervisorDailyBoardSessions}
+    onDailySessionOpen={sessionId => { const session = guideSessions.find(item => item.sessionId === sessionId); if (session) openGuideSession(session); }}
+    hideQueueHeaderIdentity
+  /></section>;
   const HeroIcon = tab === "database" ? Database : tab === "dashboard" ? LayoutDashboard : tab === "queuePayout" ? CalendarDays : tab === "issues" ? CalendarDays : tab === "communication" ? MessageCircle : tab === "settings" ? Settings2 : BarChart3;
   const heroTitle = tab === "database" ? "ฐานข้อมูล" : topNav.find(item => item.id === tab)?.label ?? (tab === "queuePayout" ? "หน้าคิวและตารางค่ารอบ" : "Supervisor");
   const heroSubtitle = tab === "database" ? "ศูนย์รวมข้อมูลและการปฏิบัติงาน ATV" : tab === "dashboard" ? "ภาพรวมรถ 200/250 ซีซีจากทุกกลุ่ม" : tab === "queuePayout" ? "คิวตั้งต้นและตารางค่ารอบจากข้อมูลชุดเดียวกัน" : tab === "issues" ? "บันทึกการทำงานรายวันร่วมกับ Guide" : tab === "communication" ? "วิทยุสื่อสารสดร่วมกับ Guide และ Mechanic" : "ศูนย์ควบคุมการปฏิบัติงาน ATV";
