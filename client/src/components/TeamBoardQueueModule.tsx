@@ -581,6 +581,20 @@ function DailySessionCard({ session, onOpen }: { session: DailySessionRecord; on
   </button>;
 }
 
+function ActiveMirrorCard({ session, now, onOpen }: { session: DailySessionRecord; now: Date; onOpen?: (sessionId: string) => void }) {
+  const names = session.memberNames.filter(Boolean).join(" · ") || session.activeUserName || "ไม่ระบุผู้ปฏิบัติงาน";
+  const startedAt = session.startedAt ? Date.parse(session.startedAt) : Number.NaN;
+  const durationSeconds = Math.max(0, session.durationMinutes * 60);
+  const elapsedSeconds = Number.isFinite(startedAt) ? Math.max(0, Math.floor((now.getTime() - startedAt) / 1000)) : 0;
+  const overtimeSeconds = Math.max(0, elapsedSeconds - durationSeconds);
+  const remainingSeconds = Math.max(0, durationSeconds - elapsedSeconds);
+  return <button type="button" className="queue-display-active-mirror" onClick={() => onOpen?.(session.sessionId)} aria-label={`เปิดรายการ Active ${names}`}>
+    <b>{names}</b>
+    <span>โปรแกรม {session.durationMinutes} นาที · R {session.riderCount} · P {session.passengerCount}</span>
+    <small>{overtimeSeconds > 0 ? `เกินเวลา +${formatClock(overtimeSeconds)}` : `เหลือเวลา ${formatClock(remainingSeconds)}`}</small>
+  </button>;
+}
+
 function QueueDisplayBoard({ operatorName, members, state, standbyNames = [], dailySessions = [], onDailySessionOpen, onNavigate }: { operatorName: string; members: BoardMember[]; state: QueueState; standbyNames?: string[]; dailySessions?: DailySessionRecord[]; onDailySessionOpen?: (sessionId: string) => void; onNavigate: (screen: "register" | "dashboard" | "queue" | "events") => void }) {
   const [now, setNow] = useState(() => new Date());
   const [selectedSection, setSelectedSection] = useState<(typeof DAILY_SECTION_SLOTS)[number] | null>(null);
@@ -637,6 +651,7 @@ function QueueDisplayBoard({ operatorName, members, state, standbyNames = [], da
       return (left.status === "Active" ? 0 : 1) - (right.status === "Active" ? 0 : 1) || dueAt(left) - dueAt(right);
     });
   });
+  const activeDailySessions = DAILY_SECTION_SLOTS.flatMap((slot) => dailySessionsBySlot[slot]);
   const todayKey = dailyOperationalDateKey(now);
   const operationalDate = new Date(`${todayKey}T00:00:00+07:00`);
   const eventsForToday = state.events.filter((event) => dailyOperationalDateKey(new Date(event.at)) === todayKey);
@@ -684,6 +699,9 @@ function QueueDisplayBoard({ operatorName, members, state, standbyNames = [], da
                 </div>
                 <div className="queue-display-status-row"><div>QL{names(ql)}</div><div>QF{names(qf)}</div></div>
                 <div className="queue-display-status-row queue-display-colored"><div className="queue-display-dp">Dp{names(dp)}</div><div className="queue-display-floating">^ <span>ตัวลอย{names(floating, true)}</span></div></div>
+                <div className="queue-display-active-mirror-list">
+                  {activeDailySessions.map((session) => <ActiveMirrorCard key={`active-mirror-${session.sessionId}`} session={session} now={now} onOpen={onDailySessionOpen} />)}
+                </div>
               </div>
               {DAILY_SECTION_SLOTS.map((slot) => <section className="queue-display-empty queue-display-section-button queue-display-daily-column" key={slot} aria-label={`รายการ Active ในช่วง ${slot}`}><div className="queue-display-daily-session-list">{dailySessionsBySlot[slot].length ? dailySessionsBySlot[slot].map(session => <DailySessionCard key={session.sessionId} session={session} onOpen={onDailySessionOpen} />) : <span className="queue-display-daily-empty">ยังไม่มีรายการ Active</span>}</div><button type="button" className="queue-display-section-history-button" onClick={() => setSelectedSection(slot)}>ดู Event ของช่วงนี้ · {eventsForToday.filter((event) => sectionForEvent(event.at) === slot).length}</button></section>)}
             </div>
