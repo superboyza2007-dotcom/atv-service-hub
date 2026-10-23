@@ -593,14 +593,15 @@ function QueueDisplayBoard({ operatorName, members, state, standbyNames = [], da
     .filter((member): member is BoardMember => Boolean(member));
   const primaryGroups = groupStandbyCardItems(selectStandbyCardItems(state));
   const activeIds = new Set(state.active.flatMap((run) => run.memberIds));
-  const queuePosition = new Map(state.standby.map((id, index) => [id, index + 1]));
   const normalizeName = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase("th-TH");
   const dailyStandbyNames = new Set([
     ...(standbyNames ?? []),
     ...dailySessions.filter((session) => session.status === "Standby").flatMap((session) => session.memberNames),
   ].filter(Boolean).map(normalizeName));
   const operatorMember = members.find((member) => normalizeName(member.name) === normalizeName(operatorName));
-  const operatorQueuePosition = operatorMember ? queuePosition.get(operatorMember.id) : undefined;
+  const operatorQueuePosition = operatorMember
+    ? primaryGroups.findIndex((group) => group.some((member) => member.id === operatorMember.id)) + 1
+    : 0;
   const operatorRole = operatorMember && !operatorMember.isShadow ? roleLabel[operatorMember.role] : "—";
   // QL/QF leave Standby while airborne/Active, so mirror the Dashboard card
   // from the full roster rather than only state.standby.
@@ -623,7 +624,7 @@ function QueueDisplayBoard({ operatorName, members, state, standbyNames = [], da
     groups[slot] = [];
     return groups;
   }, {} as Record<typeof DAILY_SECTION_SLOTS[number], DailySessionRecord[]>);
-  dailySessions.forEach(session => {
+  dailySessions.filter((session) => session.status === "Active").forEach(session => {
     const startedAt = session.startedAt ? Date.parse(session.startedAt) : Number.NaN;
     if (Number.isFinite(startedAt)) dailySessionsBySlot[sectionForEvent(startedAt)].push(session);
   });
@@ -672,10 +673,8 @@ function QueueDisplayBoard({ operatorName, members, state, standbyNames = [], da
                     const key = pair.map((member) => member?.id ?? "empty").join("-");
                     const renderQueueCell = (member: BoardMember | undefined) => {
                       if (!member) return null;
-                      const position = queuePosition.get(member.id);
-                      const label = member.isShadow ? "SHADOW" : `คิว ${position ?? "—"} · ${roleLabel[member.role]}`;
                       const highlighted = dailyStandbyNames.has(normalizeName(member.name));
-                      return <div className={highlighted ? "is-daily-standby" : undefined}><div className="queue-display-member-copy"><b>{member.name}</b><small>{label}</small></div></div>;
+                      return <div className={highlighted ? "is-daily-standby" : undefined}><div className="queue-display-member-copy"><b>{member.name}</b></div></div>;
                     };
                     return <div className="queue-display-pair" key={key}>
                       {renderQueueCell(left)}
