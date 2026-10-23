@@ -696,12 +696,12 @@ function QueueDisplayBoard({ operatorName, members, state, standbyNames = [], da
                       {renderQueueCell(right)}
                     </div>;
                   })}
+                  <div className="queue-display-active-mirror-list">
+                    {activeDailySessions.map((session) => <ActiveMirrorCard key={`active-mirror-${session.sessionId}`} session={session} now={now} onOpen={onDailySessionOpen} />)}
+                  </div>
                 </div>
                 <div className="queue-display-status-row"><div>QL{names(ql)}</div><div>QF{names(qf)}</div></div>
                 <div className="queue-display-status-row queue-display-colored"><div className="queue-display-dp">Dp{names(dp)}</div><div className="queue-display-floating">^ <span>ตัวลอย{names(floating, true)}</span></div></div>
-                <div className="queue-display-active-mirror-list">
-                  {activeDailySessions.map((session) => <ActiveMirrorCard key={`active-mirror-${session.sessionId}`} session={session} now={now} onOpen={onDailySessionOpen} />)}
-                </div>
               </div>
               {DAILY_SECTION_SLOTS.map((slot) => <section className="queue-display-empty queue-display-section-button queue-display-daily-column" key={slot} aria-label={`รายการ Active ในช่วง ${slot}`}><div className="queue-display-daily-session-list">{dailySessionsBySlot[slot].length ? dailySessionsBySlot[slot].map(session => <DailySessionCard key={session.sessionId} session={session} onOpen={onDailySessionOpen} />) : <span className="queue-display-daily-empty">ยังไม่มีรายการ Active</span>}</div><button type="button" className="queue-display-section-history-button" onClick={() => setSelectedSection(slot)}>ดู Event ของช่วงนี้ · {eventsForToday.filter((event) => sectionForEvent(event.at) === slot).length}</button></section>)}
             </div>
