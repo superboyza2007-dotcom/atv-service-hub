@@ -51,6 +51,7 @@ import { VehicleResponsibilityGroupView } from "@/components/VehicleResponsibili
 import TeamBoardQueueModule from "@/components/TeamBoardQueueModule";
 import { openFutureDiceApp } from "@/components/FutureDiceGame";
 import { CountPicker } from "@/components/SessionCreatorForm";
+import { FULL_APP_DEMO_REPAIR_REPORTS, FULL_APP_DEMO_VEHICLE_STATE, FULL_APP_DEMO_VEHICLES, isFullAppDemo } from "@/lib/full-app-demo";
 
 type GuideStatus = "Standby" | "Active" | "Completed";
 type VehicleStatus = "ready" | "repair" | "inspection" | "pickup" | "active";
@@ -183,16 +184,17 @@ function SafetyNoticeList({ notices, vehicles, onOpen }: { notices: VehicleSafet
 function labelStatus(status: GuideStatus) { return status === "Standby" ? "รอเริ่มงาน" : status === "Active" ? "กำลังทำงาน" : "จบงาน"; }
 
 export default function GuideModule3() {
+  const fullAppDemo = isFullAppDemo();
   const canonicalDirectory = useCanonicalAppDirectory();
   const directoryUsers = canonicalDirectory.users;
   const directoryMembers = useMemo(() => guideMembersFromCanonicalDirectory(directoryUsers), [directoryUsers]);
-  const [vehicles, setVehicles] = useState<GuideVehicle[]>([]);
+  const [vehicles, setVehicles] = useState<GuideVehicle[]>(() => fullAppDemo ? FULL_APP_DEMO_VEHICLES.map(vehicle => ({ id: `m3-v${vehicle.number}`, number: String(vehicle.number), cc: vehicle.cc, status: vehicle.number === 23 ? "active" : vehicle.number === 25 ? "repair" : "ready" })) : []);
   const [members, setMembers] = useState<GuideMember[]>([]);
-  const [responsibilityState, setResponsibilityState] = useState<VehicleResponsibilityState>({ version: 1, vehicleGroups: [], responsibilityGroups: [], updatedAt: 0 });
+  const [responsibilityState, setResponsibilityState] = useState<VehicleResponsibilityState>(fullAppDemo ? FULL_APP_DEMO_VEHICLE_STATE : { version: 1, vehicleGroups: [], responsibilityGroups: [], updatedAt: 0 });
 
   const [sessions, setSessions] = useState<ModuleSession[]>([]);
   const [messages, setMessages] = useState<ModuleMessage[]>([]);
-  const [repairReports, setRepairReports] = useState<RepairReport[]>([]);
+  const [repairReports, setRepairReports] = useState<RepairReport[]>(fullAppDemo ? [...FULL_APP_DEMO_REPAIR_REPORTS] : []);
   const [pickupRequests, setPickupRequests] = useState<VehiclePickupRequest[]>([]);
   const [maintenanceNotifications, setMaintenanceNotifications] = useState<VehicleMaintenanceNotification[]>([]);
   const [repairQueue, setRepairQueue] = useState<RepairQueueItem[]>([]);
@@ -253,24 +255,24 @@ export default function GuideModule3() {
     if (isStorageHydrated && selectedSessionId && requestedSession) setScreen(requestedSession.status === "Active" ? "active" : requestedSession.status === "Standby" ? "standby" : "completed");
   }, [isStorageHydrated, selectedSessionId]);
   useEffect(() => {
-    if (!canonicalDirectory.isSuccess) return;
+    if (!canonicalDirectory.isSuccess && !fullAppDemo) return;
     setMembers(directoryMembers);
-  }, [canonicalDirectory.isSuccess, directoryMembers]);
+  }, [canonicalDirectory.isSuccess, directoryMembers, fullAppDemo]);
   // Responsibility state is hydrated from the Supervisor fleet Server snapshot.
 
   // Pickup requests are hydrated from the Supervisor fleet Server snapshot.
   // Persistent state is written through Server operations snapshots only.
   useEffect(() => {
-    if (!isStorageHydrated || !isGuideSnapshotHydrated) return;
+    if (fullAppDemo || !isStorageHydrated || !isGuideSnapshotHydrated) return;
     saveGuideSessionsMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.guideSessions, payload: serializeOperationsSnapshot({ sessions, repairReports }) });
-  }, [isStorageHydrated, isGuideSnapshotHydrated, sessions, repairReports]);
+  }, [fullAppDemo, isStorageHydrated, isGuideSnapshotHydrated, sessions, repairReports]);
   useEffect(() => {
-    if (!isStorageHydrated || !guideStateHydrated.current || !canonicalDirectory.isSuccess) return;
+    if (fullAppDemo || !isStorageHydrated || !guideStateHydrated.current || (!canonicalDirectory.isSuccess && !fullAppDemo)) return;
     saveGuideStateMutation.mutate(
       { key: OPERATIONS_SNAPSHOT_KEYS.guideState, payload: serializeOperationsSnapshot({ vehicles, members, sessions, messages, repairReports, alertReports, repairQueue }) },
       { onError: () => setNotice("บันทึกข้อมูลการทำงานเข้าฐานข้อมูลไม่สำเร็จ กรุณาลองใหม่") },
     );
-  }, [isStorageHydrated, canonicalDirectory.isSuccess, vehicles, members, sessions, messages, repairReports, alertReports, repairQueue]);
+  }, [fullAppDemo, isStorageHydrated, canonicalDirectory.isSuccess, vehicles, members, sessions, messages, repairReports, alertReports, repairQueue]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   // Cross-device session refresh is provided by guideSessionsQuery polling.
   // Safety guidance is hydrated from the Mechanic Warning Tab 2 vehicleFlow Server snapshot.
@@ -783,7 +785,7 @@ export default function GuideModule3() {
       startedAt: session.startedAt,
       completedAt: session.completedAt,
     }));
-    return <main className="m3-shell m3-queue-host">{header}{mainTabs}{queuePayoutTabs}<section className="m3-queue-body"><TeamBoardQueueModule operatorName={currentOperatorName ?? activeUser?.name ?? "ผู้ใช้งานปัจจุบัน"} rosterNames={atvQueueRoster} standbyNames={atvStandbyRoster} memberOptions={directoryUsers.filter(user => /ไกด์|ช่าง|guide|mechanic/i.test(user.group ?? "")).map(user => ({ name: user.name, group: user.group }))} activeGroups={atvActiveGroups} dailySessions={dailyBoardSessions} onDailySessionOpen={sessionId => { const session = sessions.find(item => item.sessionId === sessionId); if (session) openSession(session); }} onCreateSession={startNewSession} /></section></main>;
+    return <main className="m3-shell m3-queue-host">{header}{mainTabs}{queuePayoutTabs}<section className="m3-queue-body"><TeamBoardQueueModule operatorName={currentOperatorName ?? activeUser?.name ?? "ผู้ใช้งานปัจจุบัน"} rosterNames={atvQueueRoster} standbyNames={atvStandbyRoster} memberOptions={directoryUsers.filter(user => /ไกด์|ช่าง|guide|mechanic/i.test(user.group ?? "")).map(user => ({ name: user.name, group: user.group }))} activeGroups={atvActiveGroups} dailySessions={dailyBoardSessions} onDailySessionOpen={sessionId => { const session = sessions.find(item => item.sessionId === sessionId); if (session) openSession(session); }} onCreateSession={startNewSession} demoMode={fullAppDemo} /></section></main>;
   }
   if (screen === "queuePayout" && queuePayoutView === "payout") {
     const payoutRoundColumns = PAYOUT_ROUND_COLUMNS;

@@ -18,6 +18,7 @@ export default function App() {
   const params = new URLSearchParams(window.location.search);
   const module = params.get("module");
   const isMechanicDemo = params.get("demo") === "mechanic-board";
+  const isFullAppDemo = params.get("demo") === "full-app";
   const isMechanicModule = module === "mechanic";
   const isSupervisorModule = module === "supervisor";
   const requestedModule: AppModule | null = isMechanicModule ? "mechanic" : isSupervisorModule ? "supervisor" : module === "guide" ? "guide" : null;
@@ -25,7 +26,7 @@ export default function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
         <Toaster />
-        {isMechanicDemo ? <PttRoomProvider><MechanicModule /></PttRoomProvider> : <AppAccessGate requestedModule={requestedModule}>
+        {isMechanicDemo || isFullAppDemo ? <PttRoomProvider>{isMechanicModule ? <MechanicModule /> : isSupervisorModule ? <SupervisorModule /> : <GuideModule3 />}</PttRoomProvider> : <AppAccessGate requestedModule={requestedModule}>
           <PttRoomProvider>
             <FutureDiceResultToast />
             <FutureDiceGame />

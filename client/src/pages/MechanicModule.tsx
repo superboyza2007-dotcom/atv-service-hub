@@ -40,6 +40,7 @@ import { mergeSharedSessions, patchSharedSession } from "@/lib/shared-session-sy
 import { useCanonicalAppDirectory } from "@/hooks/useCanonicalAppDirectory";
 import { buildRepairLogSheetPayload } from "@/lib/repair-log-google-sheets";
 import { showBrowserNotification } from "@/lib/browser-notification";
+import { FULL_APP_DEMO_REPAIR_REPORTS, isFullAppDemo } from "@/lib/full-app-demo";
 
 type MechanicTab = "dashboard" | "status" | "tips" | "roundTable" | "communication" | "roundChange" | "settings" | "repair" | "repairBoard" | "waitingParts" | "log";
 type MechanicFollowSession = PayoutSessionLike & { sessionId: string; status: "Active" | "Standby" | "Completed"; startedAt?: string; completedAt?: string; completedById?: string; completedByName?: string; activeUserName?: string; vehicleIds?: string[]; riderCount?: number; passengerCount?: number; overtimeAcknowledged?: boolean; completionTiming?: ReturnType<typeof sessionCompletionTiming>; activityLog?: SessionActivity[] };
@@ -121,6 +122,7 @@ function shortStatus(status: string) {
 
 export default function MechanicModule() {
   const isMechanicDemo = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("demo") === "mechanic-board";
+  const fullAppDemo = isFullAppDemo();
   const canonicalDirectory = useCanonicalAppDirectory();
   const directoryUsers = canonicalDirectory.users;
   const [tab, setTab] = useState<MechanicTab>(() => readInitialMechanicTab());
@@ -129,8 +131,8 @@ export default function MechanicModule() {
   const [localState, setLocalState] = useState<MechanicLocalState>({ alerts: [], repairs: [] });
   const [safetyNotices, setSafetyNotices] = useState<VehicleSafetyNotice[]>([]);
   const [selectedSafetyNotices, setSelectedSafetyNotices] = useState<VehicleSafetyNotice[]>([]);
-  const [guideRepairReports, setGuideRepairReports] = useState<GuideRepairReport[]>(() => isMechanicDemo ? [{ id: "demo-guide-repair-28", vehicleId: "m3-v28", description: "ตรวจพบเบรกมีเสียงดัง กรุณาตรวจสอบก่อนนำรถไปใช้งาน", reporter: "Gun (Guide)", createdAt: "2026-10-26T15:00:00.000Z", status: "แจ้งซ่อม" }] : []);
-  const [repairBoardStages, setRepairBoardStages] = useState<Record<string, "กำลังประเมิน" | "รออะไหล่ใช้งานได้" | "รออะไหล่ห้ามใช้งาน">>(() => isMechanicDemo ? { "demo-guide-repair-28": "กำลังประเมิน" } : {} as Record<string, "กำลังประเมิน" | "รออะไหล่ใช้งานได้" | "รออะไหล่ห้ามใช้งาน">);
+  const [guideRepairReports, setGuideRepairReports] = useState<GuideRepairReport[]>(() => isMechanicDemo ? [{ id: "demo-guide-repair-28", vehicleId: "m3-v28", description: "ตรวจพบเบรกมีเสียงดัง กรุณาตรวจสอบก่อนนำรถไปใช้งาน", reporter: "Gun (Guide)", createdAt: "2026-10-26T15:00:00.000Z", status: "แจ้งซ่อม" }] : fullAppDemo ? [...FULL_APP_DEMO_REPAIR_REPORTS] : []);
+  const [repairBoardStages, setRepairBoardStages] = useState<Record<string, "กำลังประเมิน" | "รออะไหล่ใช้งานได้" | "รออะไหล่ห้ามใช้งาน">>(() => isMechanicDemo ? { "demo-guide-repair-28": "กำลังประเมิน" } : fullAppDemo ? { "demo-repair-21": "กำลังประเมิน", "demo-repair-25": "รออะไหล่ห้ามใช้งาน" } : {} as Record<string, "กำลังประเมิน" | "รออะไหล่ใช้งานได้" | "รออะไหล่ห้ามใช้งาน">);
   const [repairBoardOutcomeDetails, setRepairBoardOutcomeDetails] = useState<Record<string, string>>(() => ({}));
   const [selectedRepairBoardReport, setSelectedRepairBoardReport] = useState<GuideRepairReport>();
   const [repairBoardRepairCompletionId, setRepairBoardRepairCompletionId] = useState<string>();
@@ -229,7 +231,7 @@ export default function MechanicModule() {
   const vehicleFlowSnapshotQuery = trpc.operationsSnapshots.get.useQuery({ key: OPERATIONS_SNAPSHOT_KEYS.vehicleFlow }, { retry: false, refetchInterval: 1000 });
   const supervisorFleetSnapshotQuery = trpc.operationsSnapshots.get.useQuery({ key: OPERATIONS_SNAPSHOT_KEYS.fleet }, { retry: false, refetchInterval: 3000 });
   const vehicleFlowSummaryQuery = trpc.vehicleFlow.summary.useQuery(undefined, { retry: false, refetchInterval: 3000 });
-  const repairWorkflowQuery = trpc.repairWorkflow.list.useQuery(undefined, { enabled: !isMechanicDemo, retry: false, refetchInterval: 3000 });
+  const repairWorkflowQuery = trpc.repairWorkflow.list.useQuery(undefined, { enabled: !isMechanicDemo && !fullAppDemo, retry: false, refetchInterval: 3000 });
   const directoryMeQuery = trpc.directory.me.useQuery(undefined, { retry: false, refetchOnWindowFocus: true });
   const saveGuideSessionsMutation = trpc.operationsSnapshots.merge.useMutation();
   const saveGuideStateMutation = trpc.operationsSnapshots.merge.useMutation();
@@ -265,7 +267,7 @@ export default function MechanicModule() {
     if (remote?.payoutRoundValues && typeof remote.payoutRoundValues === "object") setPersonalPayoutValues(remote.payoutRoundValues);
   }, [guideStateQuery.data, guideStateQuery.isSuccess]);
   useEffect(() => {
-    if (isMechanicDemo || !repairWorkflowQuery.isSuccess || !repairWorkflowQuery.data?.length) return;
+    if (isMechanicDemo || fullAppDemo || !repairWorkflowQuery.isSuccess || !repairWorkflowQuery.data?.length) return;
     const stageMap = { waiting_parts_usable: "รออะไหล่ใช้งานได้", waiting_parts_unavailable: "รออะไหล่ห้ามใช้งาน", assessing: "กำลังประเมิน" } as const;
     const nextStages = { ...repairBoardStages };
     const nextDetails = { ...repairBoardOutcomeDetails };
@@ -276,7 +278,7 @@ export default function MechanicModule() {
     }
     setRepairBoardStages(nextStages);
     setRepairBoardOutcomeDetails(nextDetails);
-  }, [isMechanicDemo, repairWorkflowQuery.data, repairWorkflowQuery.isSuccess]);
+  }, [fullAppDemo, isMechanicDemo, repairWorkflowQuery.data, repairWorkflowQuery.isSuccess]);
   useEffect(() => {
     if (!supervisorFleetSnapshotQuery.isSuccess) return;
     const remote = parseOperationsSnapshot<{ vehicleState?: VehicleResponsibilityState; pickupRequests?: VehiclePickupRequest[] }>(supervisorFleetSnapshotQuery.data);

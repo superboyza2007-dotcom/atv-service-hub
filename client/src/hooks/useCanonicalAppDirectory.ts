@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { FULL_APP_DEMO_USERS, isFullAppDemo } from "@/lib/full-app-demo";
 
 
 export type CanonicalDirectoryUser = { id: number; name: string; group?: string; code?: string; hasCode?: boolean };
@@ -21,13 +22,18 @@ export function normalizeCanonicalDirectoryUsers(value: unknown): CanonicalDirec
 
 /** One shared door for the app directory: the Server query is the only source of truth. */
 export function useCanonicalAppDirectory() {
-  const query = trpc.directory.list.useQuery(undefined, { retry: false, refetchOnWindowFocus: true, refetchInterval: 1000 });
-  const [users, setUsers] = useState<CanonicalDirectoryUser[]>([]);
+  const demo = isFullAppDemo();
+  const query = trpc.directory.list.useQuery(undefined, { enabled: !demo, retry: false, refetchOnWindowFocus: true, refetchInterval: 1000 });
+  const [users, setUsers] = useState<CanonicalDirectoryUser[]>(demo ? [...FULL_APP_DEMO_USERS] : []);
   const remoteUsers = useMemo(() => normalizeCanonicalDirectoryUsers(query.data), [query.data]);
 
   useEffect(() => {
+    if (demo) {
+      setUsers([...FULL_APP_DEMO_USERS]);
+      return;
+    }
     if (query.isSuccess && Array.isArray(query.data)) setUsers(remoteUsers);
-  }, [query.isSuccess, query.data, remoteUsers]);
+  }, [demo, query.isSuccess, query.data, remoteUsers]);
 
   return { ...query, users };
 }
