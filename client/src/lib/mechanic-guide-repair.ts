@@ -115,6 +115,7 @@ export function isGuideRepairReportCompleted(
 }
 
 export function isGuideRepairReportPending(report: GuideRepairReport, repairs: GuideRepairCompletionRecord[]): boolean {
+  if (report.status === "รออะไหล่ใช้งานได้") return false;
   return !repairs.some(repair => isGuideRepairReportCompleted(report, repair));
 }
 

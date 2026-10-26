@@ -344,9 +344,9 @@ export default function SupervisorModule() {
     return buildSupervisorUserDirectoryStatusModel(buildSupervisorUserDirectoryStatusSource({
       vehicleDatabase: snapshot.vehicleDatabase,
       vehicleState: snapshot.vehicleState,
-      guideReports: snapshot.guideState.repairReports,
+      guideReports: snapshot.guideReports.filter(report => !safetyNotices.some(notice => notice.waitingParts && (notice.id === report.id || notice.sourceRepairReportId === report.id))),
       mechanicRepairs: snapshot.mechanicState.repairs,
-      guidanceVehicleNumbers: safetyNotices.map(notice => notice.vehicleNumber),
+      guidanceVehicleNumbers: safetyNotices.filter(notice => !notice.waitingParts).map(notice => notice.vehicleNumber),
       pickupVehicleNumbers: snapshot.pickupRequests.filter(request => request.status === "รอรับรถ").map(request => request.vehicleNumber),
       activeVehicleNumbers: currentGuideSessions.filter(session => session.status === "Active").flatMap(session => (session.vehicleIds ?? []).map(id => Number(String(id).replace(/^m3-v/, "")))),
     }));

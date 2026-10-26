@@ -344,9 +344,9 @@ export default function MechanicModule() {
   }))).sort((a, b) => a.number - b.number), [vehicleState]);
   const supervisorStatusModel = useMemo(() => buildSupervisorUserDirectoryStatusModel(buildSupervisorUserDirectoryStatusSource({
     vehicleState,
-    guideReports: guideRepairReports,
+    guideReports: guideRepairReports.filter(report => !safetyNotices.some(notice => notice.waitingParts && (notice.id === report.id || notice.sourceRepairReportId === report.id))),
     mechanicRepairs: localState.repairs,
-    guidanceVehicleNumbers: safetyNotices.map(notice => notice.vehicleNumber),
+    guidanceVehicleNumbers: safetyNotices.filter(notice => !notice.waitingParts).map(notice => notice.vehicleNumber),
     pickupVehicleNumbers: pickupRequests.filter(request => request.status === "รอรับรถ").map(request => request.vehicleNumber),
     activeVehicleNumbers: guideSessionsFromServer.filter(session => session.status === "Active").flatMap(session => (session.vehicleIds ?? []).map(id => Number(String(id).replace(/^m3-v/, "")))),
   })), [vehicleState, guideRepairReports, localState.repairs, pickupRequests, safetyNotices, guideSessionsFromServer]);
@@ -568,11 +568,13 @@ export default function MechanicModule() {
     };
     setLocalState(nextLocalState);
     if (repairBoardPendingAlertId) {
+      const nextGuideRepairReports = guideRepairReports.map(report => report.id === repairBoardPendingAlertId ? { ...report, status: "รออะไหล่ใช้งานได้", completedAt: undefined, completedBy: undefined } : report);
+      setGuideRepairReports(nextGuideRepairReports);
       const latestVehicleState = parseOperationsSnapshot<{ vehicleState?: VehicleResponsibilityState }>(supervisorFleetSnapshotQuery.data)?.vehicleState ?? vehicleState;
       const nextVehicleState = { version: latestVehicleState.version, updatedAt: Date.now(), ...applyMechanicVehicleStatus(latestVehicleState, [vehicleNumber], "ready") };
       setVehicleState(nextVehicleState);
       saveSupervisorFleetSnapshotMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.fleet, payload: serializeOperationsSnapshot({ vehicleState: nextVehicleState }) });
-      persistRepairBoardStages({ ...repairBoardStages, [repairBoardPendingAlertId]: "รออะไหล่ใช้งานได้" }, { ...repairBoardOutcomeDetails, [repairBoardPendingAlertId]: alertDescription.trim() });
+      persistRepairBoardStages({ ...repairBoardStages, [repairBoardPendingAlertId]: "รออะไหล่ใช้งานได้" }, { ...repairBoardOutcomeDetails, [repairBoardPendingAlertId]: alertDescription.trim() }, nextGuideRepairReports);
       setRepairBoardPendingAlertId(undefined);
     }
     resetAlertForm();
@@ -941,10 +943,10 @@ export default function MechanicModule() {
     setRepairWaitingPartDetail("");
     setTab("dashboard");
   };
-  const persistRepairBoardStages = (nextStages: typeof repairBoardStages, nextDetails: typeof repairBoardOutcomeDetails = repairBoardOutcomeDetails) => {
+  const persistRepairBoardStages = (nextStages: typeof repairBoardStages, nextDetails: typeof repairBoardOutcomeDetails = repairBoardOutcomeDetails, reports = guideRepairReports) => {
     setRepairBoardStages(nextStages);
     setRepairBoardOutcomeDetails(nextDetails);
-    saveGuideSessionsMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.guideSessions, payload: serializeOperationsSnapshot({ repairReports: guideRepairReports, repairBoardStages: nextStages, repairBoardOutcomeDetails: nextDetails }) });
+    saveGuideSessionsMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.guideSessions, payload: serializeOperationsSnapshot({ repairReports: reports, repairBoardStages: nextStages, repairBoardOutcomeDetails: nextDetails }) });
   };
   const mechanicTabs = <nav className="mechanic-top-tabs" aria-label="ทางลัดงานช่าง"><button type="button" className={tab === "dashboard" ? "selected" : ""} onClick={() => setTab("dashboard")}><Wrench size={15} /> หน้าแรกช่าง</button><button type="button" className={tab === "roundChange" ? "selected" : ""} onClick={() => setTab("roundChange")}><RotateCcw size={15} /> ตั้งค่ารอบเปลี่ยน</button><button type="button" className={tab === "roundTable" ? "selected" : ""} onClick={() => { setRoundPageOffset(payoutPageOffsetForDate(new Date())); setTab("roundTable"); }}><Table2 size={15} /> ตารางค่ารอบ</button></nav>;
   const mechanicBottomNav = <nav className="mechanic-bottom-nav" aria-label="เมนูหลักโมดูลช่าง">{([{ id: "dashboard", label: "หน้าแรก", icon: Wrench }, { id: "communication", label: "ห้องสื่อสาร", icon: MessageCircle }, { id: "settings", label: "ตั้งค่า", icon: Settings2 }] as const).map(item => { const Icon = item.icon; return <button type="button" key={item.id} className={tab === item.id ? "selected" : ""} onClick={() => setTab(item.id)}><Icon size={16} /><span>{item.label}</span></button>; })}</nav>;

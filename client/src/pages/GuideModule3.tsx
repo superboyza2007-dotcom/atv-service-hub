@@ -536,9 +536,9 @@ export default function GuideModule3() {
   const guideStatusModel = useMemo(() => buildSupervisorUserDirectoryStatusModel(buildSupervisorUserDirectoryStatusSource({
     vehicleDatabase: vehicles.map(vehicle => ({ number: Number(vehicle.number), cc: vehicle.cc })),
     vehicleState: responsibilityState,
-    guideReports: repairReports,
+    guideReports: repairReports.filter(report => !safetyNotices.some(notice => notice.waitingParts && (notice.id === report.id || notice.sourceRepairReportId === report.id))),
     mechanicRepairs: parseOperationsSnapshot<{ repairs?: unknown }>(mechanicStateQuery.data)?.repairs,
-    guidanceVehicleNumbers: safetyNotices.map(notice => notice.vehicleNumber),
+    guidanceVehicleNumbers: safetyNotices.filter(notice => !notice.waitingParts).map(notice => notice.vehicleNumber),
     pickupVehicleNumbers: pickupRequests.filter(request => request.status === "รอรับรถ").map(request => request.vehicleNumber),
     activeVehicleNumbers: activeSessions.flatMap(session => session.vehicleIds.map(id => Number(String(id).replace(/^m3-v/, "")))),
   })), [activeSessions, mechanicStateQuery.data, pickupRequests, responsibilityState, repairReports, safetyNotices, vehicles]);
