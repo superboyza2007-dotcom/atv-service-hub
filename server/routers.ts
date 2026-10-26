@@ -25,6 +25,7 @@ import { completeNextActiveQueue, reconcileActiveQueue } from "./activeQueueMirr
 import { getActiveQueueBridgeSnapshot } from "./activeSourceBridge";
 import { isRepairLogSheetConfigured, repairLogPayloadSchema, submitRepairLogSheetPayload } from "./repairLogGoogleSheets";
 import { cancelFutureDiceSession, chooseFutureDiceOutcome, createFutureDiceSession, getFutureDiceInvitationForUser, getFutureDiceSession, isFutureDiceRuleError, listFutureDiceSessions, rollFutureDice, setFutureDiceOutcomeType, type FutureDiceActor } from "./futureDiceService";
+import { createRepairWorkflowItem, completeRepairWorkflowItem, listRepairWorkflowItems, transitionRepairWorkflowItem, REPAIR_WORKFLOW_STATUSES } from "./repairWorkflowService";
 
 const vehicleActor = (user: { id: number; role: "user" | "guide" | "mechanic" | "supervisor" | "admin" }) => ({
   id: user.id,
@@ -274,6 +275,26 @@ export const appRouter = router({
       const payload = await appendAppOperationsSnapshotItem(input.key, input.field, input.item, input.maxItems);
       return { success: true, payload } as const;
     }),
+  }),
+  repairWorkflow: router({
+    list: appProtectedProcedure.query(() => listRepairWorkflowItems()),
+    create: appProtectedProcedure.input(z.object({
+      id: z.string().trim().min(3).max(128),
+      source: z.enum(["manual-alert", "guide-report", "waiting-parts-usable"]),
+      sourceRepairReportId: z.string().trim().max(128).optional(),
+      vehicleNumber: z.number().int().positive(),
+      description: z.string().trim().min(3).max(2_000),
+      reporter: z.string().trim().min(1).max(255),
+      requestedPart: z.string().trim().max(2_000).optional(),
+      status: z.enum(REPAIR_WORKFLOW_STATUSES).optional(),
+    })).mutation(({ ctx, input }) => createRepairWorkflowItem(input, ctx.appUser?.id)),
+    transition: appProtectedProcedure.input(z.object({
+      id: z.string().trim().min(3).max(128),
+      status: z.enum(REPAIR_WORKFLOW_STATUSES),
+      requestedPart: z.string().trim().max(2_000).optional(),
+      note: z.string().trim().max(2_000).optional(),
+    })).mutation(({ ctx, input }) => transitionRepairWorkflowItem(input, ctx.appUser?.id)),
+    complete: appProtectedProcedure.input(z.object({ id: z.string().trim().min(3).max(128) })).mutation(({ ctx, input }) => completeRepairWorkflowItem(input.id, ctx.appUser?.id)),
   }),
   runQueue: router({
     get: appProtectedProcedure.query(async () => (await getAppOperationsSnapshot(RUN_QUEUE_SNAPSHOT_KEY)) ?? null),

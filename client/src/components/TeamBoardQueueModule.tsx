@@ -107,7 +107,7 @@ function buildBoard(rows: RegistrationRow[]): BoardMember[] {
 
 function sortedMembers(state: QueueState) { return Object.values(state.members).sort((a, b) => a.boardOrder - b.boardOrder); }
 
-function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId = "atv-active", rosterNames = [], standbyNames, memberOptions = [], operatorName = "ผู้ใช้งานปัจจุบัน", readOnly = false, dailySessions = [], onDailySessionOpen, hideQueueHeaderIdentity = false, onCreateSession }: { activeNames?: string[]; activeGroups?: ActiveSessionNameGroup[]; activeEventId?: string; rosterNames?: string[]; standbyNames?: string[]; memberOptions?: QueueMemberOption[]; operatorName?: string; readOnly?: boolean; dailySessions?: DailySessionRecord[]; onDailySessionOpen?: (sessionId: string) => void; hideQueueHeaderIdentity?: boolean; onCreateSession?: () => void }) {
+function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId = "atv-active", rosterNames = [], standbyNames, memberOptions = [], operatorName = "ผู้ใช้งานปัจจุบัน", readOnly = false, dailySessions = [], onDailySessionOpen, hideQueueHeaderIdentity = false, onCreateSession, demoMode = false }: { activeNames?: string[]; activeGroups?: ActiveSessionNameGroup[]; activeEventId?: string; rosterNames?: string[]; standbyNames?: string[]; memberOptions?: QueueMemberOption[]; operatorName?: string; readOnly?: boolean; dailySessions?: DailySessionRecord[]; onDailySessionOpen?: (sessionId: string) => void; hideQueueHeaderIdentity?: boolean; onCreateSession?: () => void; demoMode?: boolean }) {
   const [screen, setScreen] = useState<"register" | "dashboard" | "queue" | "events">("register");
   const [rows, setRows] = useState<RegistrationRow[]>(initialRows);
   const [engineState, setEngineState] = useState<QueueState | null>(null);
@@ -125,7 +125,7 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
   const [warningKey, setWarningKey] = useState<string | null>(null);
   const [replayIndex, setReplayIndex] = useState(0);
   const [operationalDayKey, setOperationalDayKey] = useState(() => dailyOperationalDateKey(new Date()));
-  const sharedQueueQuery = trpc.runQueue.get.useQuery(undefined, { retry: false, refetchInterval: 1000, enabled: true });
+  const sharedQueueQuery = trpc.runQueue.get.useQuery(undefined, { retry: false, refetchInterval: 1000, enabled: !demoMode });
   // Backend owns the 2.3 Active -> Run Queue source projection. The queue
   // engine below remains the only owner of dispatch and ordering rules.
   const activeBridgeQuery = trpc.activeBridge.snapshot.useQuery(undefined, { retry: false, refetchInterval: 1000 });
@@ -135,6 +135,7 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
   const rosterKey = rosterNames.map((name) => name.trim()).filter(Boolean).join("|");
   const seededRosterRef = useRef("");
   const resetQueueDayRef = useRef("");
+  useEffect(() => { if (demoMode) sharedQueueHydrated.current = true; }, [demoMode]);
   useEffect(() => {
     const syncOperationalDay = () => {
       const nextKey = dailyOperationalDateKey(new Date());
@@ -144,7 +145,7 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
-    if (!sharedQueueHydrated.current || readOnly) return;
+    if (demoMode || !sharedQueueHydrated.current || readOnly) return;
     const current = engineRef.current;
     const payload = serializeOperationsSnapshot({
       version: 1,
@@ -155,7 +156,7 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
       ...(current ? { state: current } : {}),
     });
     sharedQueueMutation.mutate({ payload });
-  }, [rows, operatorName, operationalDayKey, readOnly]);
+  }, [demoMode, rows, operatorName, operationalDayKey, readOnly]);
   useEffect(() => {
     if (!sharedQueueQuery.isSuccess || sharedQueueHydrated.current) return;
     sharedQueueHydrated.current = true;
@@ -186,12 +187,12 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
     resetQueueDayRef.current = operationalDayKey;
   }, [operationalDayKey, readOnly, rows]);
   useEffect(() => {
-    if (!engineState || !sharedQueueHydrated.current || readOnly) return;
+    if (demoMode || !engineState || !sharedQueueHydrated.current || readOnly) return;
     const updatedAt = Date.now();
     lastPersistedAt.current = updatedAt;
     const payload = serializeOperationsSnapshot({ version: 1, updatedAt, updatedBy: operatorName, operationalDayKey, draftRows: rows, state: engineState });
     sharedQueueMutation.mutate({ payload });
-  }, [engineState, operationalDayKey, operatorName, readOnly, rows]);
+  }, [demoMode, engineState, operationalDayKey, operatorName, readOnly, rows]);
   useEffect(() => {
     if (!rosterKey || seededRosterRef.current === rosterKey || engineRef.current || !sharedQueueHydrated.current) return;
     const uniqueRoster = Array.from(new Set(rosterNames.map((name) => name.trim()).filter(Boolean)));
@@ -368,7 +369,7 @@ function TeamBoardQueueContent({ activeNames = [], activeGroups, activeEventId =
     }
   }, [activeNames, activeEventId, activeGroups, atvMirrorKey, completedSourceSessionIds, duration, hasSourceActiveInput, members, sourceActiveGroups, sourceActiveSessions]);
 
-  if (sharedQueueQuery.isError) return <div className="queue-shared-empty" role="alert">เชื่อมต่อ Run Queue บน Server ไม่ได้ กรุณาลองใหม่</div>;
+  if (!demoMode && sharedQueueQuery.isError) return <div className="queue-shared-empty" role="alert">เชื่อมต่อ Run Queue บน Server ไม่ได้ กรุณาลองใหม่</div>;
   if (!sharedQueueHydrated.current) return <div className="queue-shared-empty" role="status">กำลังโหลด Run Queue จาก Server…</div>;
   if (readOnly) return state ? <QueueDisplayBoard operatorName={operatorName} members={members} state={visibleQueueState ?? state} standbyNames={standbyNames} dailySessions={dailySessions} onDailySessionOpen={onDailySessionOpen} hideQueueHeaderIdentity={hideQueueHeaderIdentity} onCreateSession={onCreateSession} onNavigate={() => undefined} /> : <div className="queue-shared-empty">ยังไม่มีข้อมูล Shared Run Queue</div>;
   const available = members.filter((member) => !member.isShadow && (mirrorMode || (state?.standby.includes(member.id) && !activeIds.has(member.id))));
@@ -730,6 +731,6 @@ function QueueBoard({ members, state, onNavigate }: { members: BoardMember[]; st
     .filter((member): member is BoardMember => Boolean(member));
   return <div className="app-shell"><aside className="sidebar"><div className="brand"><div className="brand-mark" aria-label="queue slot mark"><span>[[</span><i /><span>]]</span></div><div><strong>team board</strong><span>standby queue board</span></div></div><div className="sidebar-kicker">STEP 02 / QUEUE BOARD</div><nav className="nav-list"><button className="nav-item" onClick={() => onNavigate("dashboard")}><Activity size={17} />Dashboard<span className="nav-count">05</span></button><button className="nav-item active" onClick={() => onNavigate("queue")}><ListFilter size={17} />คิวตั้งต้น<span className="nav-count">{standby.length}</span></button><button className="nav-item" onClick={() => onNavigate("register")}><UsersRound size={17} />แก้คิวตั้งต้น<span className="nav-count">{members.length}</span></button><button className="nav-item" onClick={() => onNavigate("events")}><Clock3 size={17} />Event log<span className="nav-count">{state.events.length}</span></button></nav><div className="sidebar-bottom"><div className="system-status"><span className="pulse-dot" />Queue board live<span>engine v1</span></div><div className="side-note"><LockKeyhole size={15} />ลำดับปัจจุบันจาก engine</div></div></aside><main className="main-canvas queue-page"><header className="topbar"><div><div className="eyebrow"><span className="live-dot" />STANDBY QUEUE BOARD</div><h1>คิวตั้งต้นปัจจุบัน</h1><p>แสดงผลสะท้อนจากคิว Standby หลักตามลำดับจริง โดยไม่จัดกลุ่มหรือเรียงสมาชิกใหม่</p></div><div className="header-actions"><button className="clear-button" onClick={() => onNavigate("dashboard")}>กลับ Dashboard</button></div></header><section className="panel queue-board-panel"><div className="panel-heading"><div><div className="section-index">01 / CURRENT STANDBY ORDER</div><h2>ลำดับคิวที่กำลังรอ</h2><span className="card-subtitle">คิวหลัก {standby.length} รายการ · แสดงตามลำดับจริง</span></div><span className="count-chip">{standby.length} คน</span></div>{standby.length === 0 ? <div className="card-empty">ไม่มีสมาชิกใน Standby</div> : <div className="queue-board-list">{standby.map((member, index) => <div className="queue-team-row is-individual" key={member.id}><span className="queue-rank">{String(index + 1).padStart(2, "0")}</span><div className="queue-team-content"><div className="team-group-label"><span>{`STANDBY ${String(index + 1).padStart(2, "0")}`}</span><b>{member.isShadow ? "แสดงผลเท่านั้น" : roleLabel[member.role]}</b><em>{member.isShadow ? "ไม่เข้าร่วมการคำนวณ" : "รายการจากคิวหลัก"}</em></div><div className="horizontal-team-members"><div className="horizontal-member"><TeamAvatar member={member} /><div className="member-copy"><strong className={member.isShadow ? "shadow-name" : ""}>{member.name}</strong><span>{member.shift} · {member.rounds} รอบ</span></div><span className={`state-tag ${member.isShadow ? "state-shadow" : member.role === "dp" ? "state-dp" : member.role === "floating" ? "state-floating" : "state-active"}`}>{member.isShadow ? "ผู้ใช้เงา" : roleLabel[member.role]}</span></div></div></div></div>)}</div>}</section></main></div>;
 }
-export default function TeamBoardQueueModule(props: { activeNames?: string[]; activeGroups?: ActiveSessionNameGroup[]; activeEventId?: string; rosterNames?: string[]; standbyNames?: string[]; memberOptions?: QueueMemberOption[]; operatorName?: string; readOnly?: boolean; dailySessions?: DailySessionRecord[]; onDailySessionOpen?: (sessionId: string) => void; hideQueueHeaderIdentity?: boolean; onCreateSession?: () => void }) {
+export default function TeamBoardQueueModule(props: { activeNames?: string[]; activeGroups?: ActiveSessionNameGroup[]; activeEventId?: string; rosterNames?: string[]; standbyNames?: string[]; memberOptions?: QueueMemberOption[]; operatorName?: string; readOnly?: boolean; dailySessions?: DailySessionRecord[]; onDailySessionOpen?: (sessionId: string) => void; hideQueueHeaderIdentity?: boolean; onCreateSession?: () => void; demoMode?: boolean }) {
   return <div className="team-board-queue-scope"><TeamBoardQueueContent {...props} /></div>;
 }

@@ -42,6 +42,7 @@ import { SupervisorStandbyCreator, type SupervisorStandbyDraft } from "@/compone
 import { findSessionConflict, findSessionDraftDuplicates } from "@/lib/session-conflicts";
 import { useCanonicalAppDirectory } from "@/hooks/useCanonicalAppDirectory";
 import { openFutureDiceApp } from "@/components/FutureDiceGame";
+import { FULL_APP_DEMO_FLEET_GROUPS, FULL_APP_DEMO_REPAIR_REPORTS, FULL_APP_DEMO_USERS, FULL_APP_DEMO_VEHICLE_STATE, FULL_APP_DEMO_VEHICLES, isFullAppDemo } from "@/lib/full-app-demo";
 
 type SupervisorTab = "dashboard" | "status" | "issues" | "communication" | "settings" | "queuePayout" | "database";
 type DataTab = "users" | "vehicles" | "fleet-groups" | "usage-hours";
@@ -158,12 +159,20 @@ function SupervisorDailyBoard({ timeline, bySlot, members, notice, onOpenSession
 }
 
 export default function SupervisorModule() {
+  const fullAppDemo = isFullAppDemo();
   const [tab, setTab] = useState<SupervisorTab>(() => {
     if (typeof window === "undefined") return "database";
     const requested = new URLSearchParams(window.location.search).get("tab");
     return requested === "dashboard" || requested === "issues" || requested === "communication" || requested === "settings" || requested === "queuePayout" || requested === "database" ? requested : "database";
   });
-  const [snapshot, setSnapshot] = useState<SupervisorSnapshot>(EMPTY_SUPERVISOR_SNAPSHOT);
+  const [snapshot, setSnapshot] = useState<SupervisorSnapshot>(() => fullAppDemo ? {
+    ...EMPTY_SUPERVISOR_SNAPSHOT,
+    directoryUsers: [...FULL_APP_DEMO_USERS],
+    vehicleDatabase: [...FULL_APP_DEMO_VEHICLES],
+    fleetGroups: FULL_APP_DEMO_FLEET_GROUPS.map(group => ({ ...group, vehicleNumbers: [...group.vehicleNumbers], managerIds: [...group.managerIds] })),
+    vehicleState: FULL_APP_DEMO_VEHICLE_STATE,
+    guideReports: [...FULL_APP_DEMO_REPAIR_REPORTS],
+  } : EMPTY_SUPERVISOR_SNAPSHOT);
   const [isFleetSnapshotHydrated, setIsFleetSnapshotHydrated] = useState(false);
   const [isGuideSessionsSnapshotHydrated, setIsGuideSessionsSnapshotHydrated] = useState(false);
   const [safetyNotices, setSafetyNotices] = useState<VehicleSafetyNotice[]>([]);

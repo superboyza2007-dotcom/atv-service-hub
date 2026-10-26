@@ -14013,3 +14013,87 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
   .m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-guide-21-vehicle-grid-250 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-guide-21-vehicle-tile { min-height: 46px; }
 }
+
+/* Mechanic repair board: four-stage kanban view based on the supplied reference. */
+.mechanic-repair-board { display: grid; gap: 16px; padding: 16px; border: 1px solid rgba(103, 215, 147, .27); border-radius: 15px; background: rgba(8, 29, 30, .72); }
+.mechanic-repair-board-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid rgba(143, 186, 161, .28); color: #e1ffea; }
+.mechanic-repair-board-heading span { color: #9dafaa; font-size: 10px; letter-spacing: .08em; }
+.mechanic-repair-board-heading h3 { margin: 3px 0 0; color: #f1fff4; font-size: 21px; }
+.mechanic-repair-board-heading small { display: block; margin-top: 4px; color: #9dafaa; font-size: 11px; }
+.mechanic-repair-board-columns { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; min-width: 0; }
+.mechanic-repair-board-column { min-width: 0; min-height: 430px; overflow: hidden; border: 1px solid rgba(143, 186, 161, .3); border-radius: 10px; background: rgba(4, 18, 20, .62); }
+.mechanic-repair-board-column > header { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 58px; padding: 9px 10px; border-bottom: 3px solid #647c71; background: rgba(38, 66, 57, .86); }
+.mechanic-repair-board-column > header h4 { margin: 0; color: #effff3; font-size: 14px; line-height: 1.2; }
+.mechanic-repair-board-column > header b { min-width: 24px; padding: 3px 6px; border-radius: 99px; color: #102119; background: #c5f3cf; text-align: center; font-size: 12px; }
+.mechanic-repair-board-column.reported > header { border-bottom-color: #e27676; background: rgba(102, 37, 42, .82); }
+.mechanic-repair-board-column.assessing > header { border-bottom-color: #e2b45d; background: rgba(104, 77, 31, .82); }
+.mechanic-repair-board-column.unavailable > header { border-bottom-color: #e77958; background: rgba(105, 48, 33, .82); }
+.mechanic-repair-board-column.available > header { border-bottom-color: #6bd394; background: rgba(31, 90, 57, .82); }
+.mechanic-repair-board-list { display: grid; align-content: start; gap: 8px; min-height: 365px; padding: 10px; }
+.mechanic-repair-board-card { display: grid; gap: 5px; width: 100%; padding: 10px; border: 1px solid rgba(161, 221, 178, .48); border-radius: 8px; color: #eaffee; background: rgba(15, 42, 35, .9); text-align: left; cursor: pointer; }
+.mechanic-repair-board-card:hover { border-color: #9af2b4; background: rgba(30, 75, 52, .95); }
+.mechanic-repair-board-card strong { color: #d9ffe2; font-size: 14px; }
+.mechanic-repair-board-card span { color: #e2eee5; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.mechanic-repair-board-card small { color: #9dafaa; font-size: 10px; line-height: 1.25; }
+.mechanic-repair-board-empty { margin: auto 0; color: #779184; text-align: center; font-size: 12px; }
+@media (max-width: 720px) { .mechanic-repair-board { padding: 9px; }.mechanic-repair-board-heading h3 { font-size: 17px; }.mechanic-repair-board-columns { grid-template-columns: repeat(4, minmax(152px, 1fr)); overflow-x: auto; padding-bottom: 4px; }.mechanic-repair-board-column { min-height: 360px; }.mechanic-repair-board-list { min-height: 295px; padding: 7px; }.mechanic-repair-board-card { padding: 8px; }.mechanic-repair-board-card strong { font-size: 12px; }.mechanic-repair-board-card span { font-size: 10px; }.mechanic-repair-board-column > header { min-height: 49px; padding: 7px; }.mechanic-repair-board-column > header h4 { font-size: 11px; } }
+
+.mechanic-repair-board-column.in-progress > header { border-bottom-color: #68b9e8; background: rgba(30, 76, 108, .86); }
+.mechanic-repair-board-card { gap: 0; padding: 0; }
+.mechanic-repair-board-card-open { display: grid; gap: 5px; width: 100%; padding: 10px; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+.mechanic-repair-board-card-open strong { color: #d9ffe2; font-size: 14px; }
+.mechanic-repair-board-card-open span { color: #e2eee5; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.mechanic-repair-board-card-open small { color: #9dafaa; font-size: 10px; line-height: 1.25; }
+.mechanic-repair-board-advance { display: flex; align-items: center; justify-content: space-between; width: calc(100% - 12px); margin: 0 6px 7px; padding: 5px 7px; border: 1px solid rgba(104, 185, 232, .55); border-radius: 5px; color: #d9f3ff; background: rgba(31, 99, 137, .55); font-size: 10px; font-weight: 700; cursor: pointer; }
+.mechanic-repair-board-advance:hover { border-color: #a8e0ff; background: rgba(45, 128, 173, .72); }
+@media (min-width: 721px) { .mechanic-repair-board-columns { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@media (max-width: 720px) { .mechanic-repair-board-columns { grid-template-columns: repeat(5, minmax(152px, 1fr)); } .mechanic-repair-board-card-open { padding: 8px; }.mechanic-repair-board-card-open strong { font-size: 12px; }.mechanic-repair-board-card-open span { font-size: 10px; } }
+
+.mechanic-repair-board-advance.mechanic-repair-board-reverse { border-color: rgba(226, 180, 93, .58); color: #fff0c7; background: rgba(111, 80, 27, .55); }
+.mechanic-repair-board-advance.mechanic-repair-board-reverse:hover { border-color: #ffe09a; background: rgba(145, 102, 33, .72); }
+
+.mechanic-repair-dialog-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 18px; background: rgba(3, 10, 11, .78); }
+.mechanic-repair-dialog { width: min(560px, 100%); padding: 18px; border: 1px solid rgba(124, 229, 157, .55); border-radius: 14px; color: #ecfff1; background: #102a28; box-shadow: 0 18px 60px rgba(0, 0, 0, .48); }
+.mechanic-repair-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid rgba(143, 186, 161, .3); }
+.mechanic-repair-dialog > header span { color: #9dafaa; font-size: 10px; letter-spacing: .08em; }
+.mechanic-repair-dialog h3 { margin: 4px 0 0; color: #f1fff4; font-size: 19px; }
+.mechanic-repair-dialog > header > button { width: 30px; height: 30px; border: 1px solid rgba(255,255,255,.25); border-radius: 7px; color: #fff; background: transparent; font-size: 22px; line-height: 1; }
+.mechanic-repair-dialog dl { display: grid; gap: 10px; margin: 16px 0; }
+.mechanic-repair-dialog dl div { display: grid; gap: 3px; padding: 9px 10px; border-radius: 8px; background: rgba(3, 18, 19, .55); }
+.mechanic-repair-dialog dt { color: #9dafaa; font-size: 11px; }
+.mechanic-repair-dialog dd { margin: 0; color: #f0fff3; font-size: 14px; line-height: 1.4; }
+.mechanic-repair-dialog-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mechanic-repair-dialog-actions button { min-height: 48px; padding: 7px; border: 1px solid transparent; border-radius: 8px; color: #fff; font-size: 11px; font-weight: 700; }
+.dialog-repair-done { background: #267b4a; }.dialog-wait-usable { background: #256889; }.dialog-wait-unavailable { background: #9a4e37; }
+.mechanic-repair-dialog-actions button:hover { filter: brightness(1.18); }
+.mechanic-waiting-parts-panel { display: grid; gap: 8px; margin: 12px 0; padding: 13px; border: 1px solid rgba(231, 121, 88, .55); border-radius: 10px; background: rgba(105, 48, 33, .25); }
+.mechanic-waiting-parts-panel strong { color: #ffe5d8; }.mechanic-waiting-parts-panel small { color: #e7b8a5; }.mechanic-waiting-parts-panel textarea { min-height: 76px; padding: 9px; border: 1px solid rgba(255,255,255,.22); border-radius: 7px; color: #effff3; background: rgba(0,0,0,.22); resize: vertical; }
+@media (max-width: 520px) { .mechanic-repair-dialog-actions { grid-template-columns: 1fr; }.mechanic-repair-dialog h3 { font-size: 16px; } }
+
+/* Four-column repair board after removing the intermediate status. */
+.mechanic-repair-board-columns { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mechanic-waiting-parts-page { display: grid; gap: 18px; padding: 20px; border: 1px solid rgba(231, 121, 88, .38); border-radius: 15px; background: rgba(8, 29, 30, .72); }
+.mechanic-waiting-parts-form { display: grid; gap: 12px; max-width: 680px; padding: 18px; border: 1px solid rgba(231, 121, 88, .5); border-radius: 12px; background: rgba(105, 48, 33, .24); }
+.mechanic-waiting-parts-form strong { color: #ffe5d8; font-size: 18px; }.mechanic-waiting-parts-form p { margin: 0; color: #e7b8a5; line-height: 1.45; }.mechanic-waiting-parts-form textarea { min-height: 130px; padding: 11px; border: 1px solid rgba(255,255,255,.25); border-radius: 8px; color: #effff3; background: rgba(0,0,0,.24); resize: vertical; }.mechanic-waiting-parts-form > div { display: flex; flex-wrap: wrap; gap: 8px; }.mechanic-waiting-parts-form button { min-height: 38px; padding: 7px 12px; border-radius: 7px; }
+@media (max-width: 720px) { .mechanic-repair-board-columns { grid-template-columns: repeat(4, minmax(152px, 1fr)); } }
+
+.mechanic-inline-log-heading { display: grid; gap: 3px; margin-top: 22px; padding: 14px 0 8px; border-top: 1px solid rgba(143, 186, 161, .3); }
+.mechanic-inline-log-heading p { margin: 0; color: #9dafaa; font-size: 10px; letter-spacing: .08em; }.mechanic-inline-log-heading h3 { margin: 0; color: #effff3; font-size: 18px; }.mechanic-inline-log-heading small { color: #9dafaa; font-size: 11px; }
+
+.mechanic-repair-dialog-actions-two { grid-template-columns: 1fr 1fr; }.dialog-back { background: #465e60; }.dialog-back:hover { background: #5e7779; }
+.mechanic-repair-board-card-id { color: #83c9a0; font-size: 9px; font-style: normal; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }.mechanic-sheet-table code { color: #bde8c8; font-size: 10px; }.mechanic-sheet-table td > small { display: block; color: #9dafaa; font-size: 10px; }
+/* Full-app demo test center */
+.full-app-demo-shell { max-width: 1180px; margin: 0 auto; padding: 28px 20px 72px; }
+.full-app-demo-hero { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 28px; border: 1px solid rgba(129,229,151,.35); }
+.full-app-demo-hero p, .full-app-demo-module-card p { margin: 0 0 8px; color: #81e597; font-size: 11px; letter-spacing: .18em; font-weight: 800; }
+.full-app-demo-hero h1 { margin: 0 0 8px; color: #f4f8ee; font-size: clamp(28px, 5vw, 52px); }
+.full-app-demo-hero span, .full-app-demo-module-card span, .full-app-demo-note p { color: rgba(240,247,239,.72); line-height: 1.65; }
+.full-app-demo-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
+.full-app-demo-summary div { display: flex; align-items: center; gap: 10px; padding: 18px; border: 1px solid rgba(129,229,151,.2); border-radius: 14px; background: rgba(8,25,27,.82); }
+.full-app-demo-summary strong { color: #81e597; font-size: 28px; }.full-app-demo-summary span { color: rgba(240,247,239,.7); }
+.full-app-demo-module-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.full-app-demo-module-card { min-height: 190px; display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; padding: 22px; border: 1px solid rgba(255,255,255,.16); border-radius: 16px; text-decoration: none; transition: transform .18s ease, border-color .18s ease; }
+.full-app-demo-module-card:hover { transform: translateY(-3px); border-color: #81e597; }.full-app-demo-module-card.guide { background: linear-gradient(145deg, rgba(25,87,67,.9), rgba(7,29,32,.96)); }.full-app-demo-module-card.supervisor { background: linear-gradient(145deg, rgba(80,63,22,.9), rgba(7,29,32,.96)); }.full-app-demo-module-card.mechanic { background: linear-gradient(145deg, rgba(95,43,38,.9), rgba(7,29,32,.96)); }
+.full-app-demo-module-card h2 { margin: 0 0 8px; color: #fff; font-size: 27px; }.full-app-demo-module-card svg { flex: 0 0 auto; color: #81e597; }
+.full-app-demo-note { margin-top: 16px; padding: 20px 24px; }.full-app-demo-note p { margin: 8px 0 0; }
+@media (max-width: 760px) { .full-app-demo-summary, .full-app-demo-module-grid { grid-template-columns: 1fr; }.full-app-demo-hero { padding: 22px; } }
