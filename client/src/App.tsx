@@ -8,6 +8,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import GuideModule3 from "./pages/GuideModule3";
 import MechanicModule from "./pages/MechanicModule";
 import SupervisorModule from "./pages/SupervisorModule";
+import FullAppDemoModule from "./pages/FullAppDemoModule";
 import FutureDiceResultToast from "./components/FutureDiceResultToast";
 import FutureDiceGame from "./components/FutureDiceGame";
 import { PttRoomProvider } from "./components/PttRoom";
@@ -26,7 +27,7 @@ export default function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
         <Toaster />
-        {isMechanicDemo || isFullAppDemo ? <PttRoomProvider>{isMechanicModule ? <MechanicModule /> : isSupervisorModule ? <SupervisorModule /> : <GuideModule3 />}</PttRoomProvider> : <AppAccessGate requestedModule={requestedModule}>
+        {isMechanicDemo || isFullAppDemo ? <PttRoomProvider>{isFullAppDemo && !isMechanicModule && !isSupervisorModule && module !== "guide" ? <FullAppDemoModule /> : isMechanicModule ? <MechanicModule /> : isSupervisorModule ? <SupervisorModule /> : <GuideModule3 />}</PttRoomProvider> : <AppAccessGate requestedModule={requestedModule}>
           <PttRoomProvider>
             <FutureDiceResultToast />
             <FutureDiceGame />
