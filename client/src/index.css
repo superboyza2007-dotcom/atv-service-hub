@@ -14109,3 +14109,7 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
   .mechanic-waiting-parts-toggle input { width: 12px !important; height: 12px !important; }
   .mechanic-waiting-parts-badge { min-width: 42px; padding: 2px 3px; font-size: 8px; }
 }
+
+/* Final override: the mechanic module has exactly three bottom-nav tabs. */
+.mechanic-bottom-nav { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+.mechanic-bottom-nav > button { grid-column: auto !important; width: 100%; }
