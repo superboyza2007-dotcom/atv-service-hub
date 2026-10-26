@@ -90,6 +90,7 @@ type AlertRecord = { id: string; vehicleNumber: number; description: string; sev
 type RepairRecord = { id: string; vehicleNumber: number; symptom: string; parts: string; technician: string; decision?: RepairDecision; status: RepairStatus; createdAt: string; updatedAt: string; sourceGuideRepairId?: string; accumulatedHoursAtRepair?: number };
 type MechanicLocalState = { alerts: AlertRecord[]; repairs: RepairRecord[] };
 type MechanicServerState = MechanicLocalState & { repairPartOptions?: string[]; roundChangeSettings?: RoundChangeSettings; maintenanceResetHours?: Record<string, number>; personalPayoutValues?: PersonalPayoutValues };
+type PendingMaintenanceReset = { ruleId: string; vehicleNumber: number };
 const defaultRepairPartOptions = ["น้ำมันเครื่อง", "ผ้าเบรก", "ยาง", "แบตเตอรี่", "โซ่และสเตอร์"];
 const EMPTY_VEHICLE_STATE: VehicleResponsibilityState = { version: 1, vehicleGroups: [], responsibilityGroups: [], updatedAt: 0 };
 
@@ -156,6 +157,7 @@ export default function MechanicModule() {
   const [roundChangeView, setRoundChangeView] = useState<"vehicles" | "alerts">("vehicles");
   const [maintenanceViewRuleId, setMaintenanceViewRuleId] = useState<string>();
   const [maintenanceResetHours, setMaintenanceResetHours] = useState<Record<string, number>>({});
+  const [pendingMaintenanceReset, setPendingMaintenanceReset] = useState<PendingMaintenanceReset>();
   const [roundPageOffset, setRoundPageOffset] = useState(() => new Date().getDate() >= 16 ? 1 : 0);
   const [personalPayoutValues, setPersonalPayoutValues] = useState<PersonalPayoutValues>({});
   const [guideSnapshotVersion, setGuideSnapshotVersion] = useState(0);
@@ -572,6 +574,14 @@ export default function MechanicModule() {
         : [nextRepair, ...localState.repairs],
     };
     setLocalState(nextLocalState);
+    const repairPartsText = parts.toLocaleLowerCase();
+    const resetRuleIds = roundChangeSettings.rules
+      .filter(rule => (pendingMaintenanceReset?.vehicleNumber === vehicleNumber && pendingMaintenanceReset.ruleId === rule.id) || repairPartsText.includes(rule.name.toLocaleLowerCase()))
+      .map(rule => rule.id);
+    if (resetRuleIds.length) {
+      setMaintenanceResetHours(current => resetRuleIds.reduce((next, ruleId) => ({ ...next, [`${ruleId}:${vehicleNumber}`]: accumulatedHoursAtRepair }), current));
+      if (pendingMaintenanceReset?.vehicleNumber === vehicleNumber) setPendingMaintenanceReset(undefined);
+    }
 
     const trackedVehicleNumbers = [vehicleNumber, ...(existing ? [existing.vehicleNumber] : [])];
     const latestVehicleState = parseOperationsSnapshot<{ vehicleState?: VehicleResponsibilityState }>(supervisorFleetSnapshotQuery.data)?.vehicleState ?? vehicleState;
@@ -751,7 +761,7 @@ export default function MechanicModule() {
   const clearMaintenanceVehicleHours = (vehicleNumber: number) => {
     const usage = vehicleUsageHours.find(item => item.number === String(vehicleNumber));
     if (!usage || !activeMaintenanceRule) return;
-    setMaintenanceResetHours(current => ({ ...current, [`${activeMaintenanceRule.id}:${vehicleNumber}`]: usage.accumulatedHours }));
+    setPendingMaintenanceReset({ ruleId: activeMaintenanceRule.id, vehicleNumber });
     setRepairVehicle(String(vehicleNumber));
     setRepairParts(activeMaintenanceRule.name);
     setRepairSymptom("");
