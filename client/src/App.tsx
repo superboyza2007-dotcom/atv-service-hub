@@ -15,7 +15,9 @@ import AppAccessGate from "./components/AppAccessGate";
 import type { AppModule } from "@/lib/app-access";
 
 export default function App() {
-  const module = new URLSearchParams(window.location.search).get("module");
+  const params = new URLSearchParams(window.location.search);
+  const module = params.get("module");
+  const isMechanicDemo = params.get("demo") === "mechanic-board";
   const isMechanicModule = module === "mechanic";
   const isSupervisorModule = module === "supervisor";
   const requestedModule: AppModule | null = isMechanicModule ? "mechanic" : isSupervisorModule ? "supervisor" : module === "guide" ? "guide" : null;
@@ -23,13 +25,13 @@ export default function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
         <Toaster />
-        <AppAccessGate requestedModule={requestedModule}>
+        {isMechanicDemo ? <PttRoomProvider><MechanicModule /></PttRoomProvider> : <AppAccessGate requestedModule={requestedModule}>
           <PttRoomProvider>
             <FutureDiceResultToast />
             <FutureDiceGame />
             {isMechanicModule ? <MechanicModule /> : isSupervisorModule ? <SupervisorModule /> : <GuideModule3 />}
           </PttRoomProvider>
-        </AppAccessGate>
+        </AppAccessGate>}
       </ThemeProvider>
     </ErrorBoundary>
   );
