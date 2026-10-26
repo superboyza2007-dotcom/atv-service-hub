@@ -23,7 +23,7 @@ describe("vehicle maintenance notification sent state", () => {
     expect(hasVehicleMaintenanceNotification([notification("oil", 12)], "brake", 12)).toBe(false);
   });
 
-  it("keeps a sent vehicle marked after the guide acknowledges it", () => {
-    expect(hasVehicleMaintenanceNotification([notification("oil", 12, "รับทราบแล้ว")], "oil", 12)).toBe(true);
+  it("allows the mechanic to send again after the guide acknowledges it", () => {
+    expect(hasVehicleMaintenanceNotification([notification("oil", 12, "รับทราบแล้ว")], "oil", 12)).toBe(false);
   });
 });

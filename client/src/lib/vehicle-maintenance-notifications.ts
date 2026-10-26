@@ -81,5 +81,5 @@ export function pendingVehicleMaintenanceNotifications(notifications: VehicleMai
 }
 
 export function hasVehicleMaintenanceNotification(notifications: VehicleMaintenanceNotification[], ruleId: string | undefined, vehicleNumber: number) {
-  return Boolean(ruleId) && notifications.some(notification => notification.ruleId === ruleId && notification.vehicleNumber === vehicleNumber);
+  return Boolean(ruleId) && notifications.some(notification => notification.ruleId === ruleId && notification.vehicleNumber === vehicleNumber && notification.status === "รอตรวจสอบ");
 }
