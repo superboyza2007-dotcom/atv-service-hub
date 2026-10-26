@@ -13974,3 +13974,42 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
   .m3-vehicle-mode-card span { font-size: 9px; }
   .m3-guide-21-vehicle-grid-number { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Compact two-column fleet groups and readable vehicle number tiles. */
+.m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-input-vehicle-group {
+  padding: 7px;
+  border-radius: 9px;
+}
+.m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-input-vehicle-group-heading {
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+}
+.m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-input-vehicle-group-heading strong { font-size: 11px; }
+.m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-input-vehicle-group-heading span,
+.m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-input-vehicle-group-heading small { font-size: 8px; }
+.m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-input-vehicle-cc-heading { margin-bottom: 4px; }
+.m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-input-vehicle-cc-heading strong,
+.m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-input-vehicle-cc-heading span { font-size: 9px; }
+.m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-guide-21-vehicle-grid,
+.m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-guide-21-vehicle-grid-250 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+}
+.m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-guide-21-vehicle-tile {
+  min-height: 42px;
+  padding: 3px;
+  border-radius: 6px;
+}
+.m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-guide-21-vehicle-tile b { font-size: 11px; }
+.m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-guide-21-vehicle-tile small,
+.m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-guide-21-vehicle-tile em { font-size: 7px; line-height: 1.1; }
+.m3-input-vehicle-number-mode { grid-template-columns: 1fr; }
+@media (min-width: 900px) {
+  .m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-guide-21-vehicle-grid,
+  .m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-guide-21-vehicle-grid-250 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .m3-input-vehicle-groups:not(.m3-input-vehicle-number-mode) .m3-guide-21-vehicle-tile { min-height: 46px; }
+}
