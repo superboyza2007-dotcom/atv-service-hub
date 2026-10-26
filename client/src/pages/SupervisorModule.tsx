@@ -597,7 +597,7 @@ export default function SupervisorModule() {
     if (selectedGuideSession?.status !== "Active" || !selectedGuideSession.startedAt || selectedGuideSession.overtimeAcknowledged || !selectedSupervisorTiming || selectedSupervisorTiming.overtimeSeconds <= 0) return;
     setSupervisorCompletionPrompt(current => isActiveCompletionPromptFor(current, selectedGuideSession.sessionId) ? current : createActiveCompletionPrompt(selectedGuideSession.sessionId, "expired"));
   }, [selectedGuideSession?.sessionId, selectedGuideSession?.status, selectedGuideSession?.startedAt, selectedGuideSession?.overtimeAcknowledged, selectedSupervisorTiming?.overtimeSeconds]);
-  const openGuideSession = (session: SupervisorGuideSession) => { setSelectedGuideSessionId(session.sessionId); setSupervisorCompletionPrompt(null); setSupervisorDetailAction(null); setNotice(""); };
+  const openGuideSession = (session: SupervisorGuideSession) => { setSelectedGuideSessionId(session.sessionId); setSupervisorCompletionPrompt(null); setSupervisorDetailAction(null); setNotice(""); setTab("dashboard"); };
   const closeGuideSession = () => { setSelectedGuideSessionId(undefined); setSupervisorCompletionPrompt(null); setSupervisorDetailAction(null); setNotice(""); };
   const openSafetyNotices = (notices: VehicleSafetyNotice[]) => setSelectedSafetyNotices(notices);
   const safetyNoticeDialog = <VehicleSafetyNoticeDialog notices={selectedSafetyNotices} onClose={() => setSelectedSafetyNotices([])} />;
