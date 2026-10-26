@@ -8,6 +8,8 @@ export type VehicleSafetyNotice = {
   reporter: string;
   createdAt: string;
   updatedAt?: string;
+  waitingParts?: boolean;
+  waitingPartDetail?: string;
 };
 
 const isNotice = (value: unknown): value is VehicleSafetyNotice => {
