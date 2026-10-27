@@ -295,7 +295,11 @@ export default function GuideModule3() {
     return a.name.localeCompare(b.name, "th");
   });
   const activeUser = directoryUsers.find(user => String(user.id) === activeUserId);
-  const visibleRepairReports = useMemo(() => repairReports.filter(report => report.status !== "ซ่อมเสร็จ" && !report.completedAt), [repairReports]);
+  const visibleRepairReports = useMemo(() => repairReports.filter(report => {
+    const movedToWaitingParts = String(report.status) === "รออะไหล่ใช้งานได้"
+      || safetyNotices.some(notice => notice.waitingParts && (notice.id === report.id || notice.sourceRepairReportId === report.id));
+    return report.status !== "ซ่อมเสร็จ" && !report.completedAt && !movedToWaitingParts;
+  }), [repairReports, safetyNotices]);
   const { isAuthenticated: isOAuthAuthenticated, user: authenticatedUser } = useAuth();
   const isAuthenticated = Boolean(currentIdentity) || isOAuthAuthenticated;
   const authenticatedActor = authenticatedUser?.name ? { id: String(authenticatedUser.id), name: authenticatedUser.name } : undefined;
