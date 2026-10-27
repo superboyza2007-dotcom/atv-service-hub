@@ -14113,3 +14113,24 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
 /* Final override: the mechanic module has exactly three bottom-nav tabs. */
 .mechanic-bottom-nav { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
 .mechanic-bottom-nav > button { grid-column: auto !important; width: 100%; }
+
+/* Shared Thai speech accessibility settings */
+.speech-settings-card { display: grid; gap: 14px; margin: 14px 0; padding: 16px; border: 1px solid rgba(125, 222, 158, .28); border-radius: 12px; background: linear-gradient(135deg, rgba(17, 65, 48, .7), rgba(9, 35, 34, .78)); color: #effff3; }
+.speech-settings-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.speech-settings-heading p { margin: 0 0 4px; color: #8df0ad; font: 700 10px/1.2 "IBM Plex Mono", monospace; letter-spacing: .08em; }
+.speech-settings-heading h3 { margin: 0; font-size: 18px; }
+.speech-settings-heading span { display: block; margin-top: 5px; color: rgba(239, 255, 243, .68); font-size: 12px; line-height: 1.5; }
+.speech-settings-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px; border: 1px solid rgba(141, 240, 173, .2); border-radius: 9px; background: rgba(0, 0, 0, .14); cursor: pointer; }
+.speech-settings-toggle span { display: grid; gap: 4px; }
+.speech-settings-toggle strong { font-size: 14px; }
+.speech-settings-toggle small { color: rgba(239, 255, 243, .68); font-size: 11px; line-height: 1.45; }
+.speech-settings-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.speech-settings-toggle i { position: relative; flex: 0 0 auto; width: 46px; height: 26px; border-radius: 999px; background: rgba(255,255,255,.2); transition: .18s ease; }
+.speech-settings-toggle i::after { content: ""; position: absolute; top: 4px; left: 4px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: .18s ease; }
+.speech-settings-toggle:has(input:checked) i { background: #3fd978; }
+.speech-settings-toggle:has(input:checked) i::after { transform: translateX(20px); background: #082317; }
+.speech-settings-toggle:focus-within { outline: 2px solid #8df0ad; outline-offset: 2px; }
+.speech-settings-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.speech-settings-actions span { color: rgba(239, 255, 243, .58); font-size: 11px; }
+.speech-settings-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.supervisor-settings-stack { display: grid; gap: 16px; }
