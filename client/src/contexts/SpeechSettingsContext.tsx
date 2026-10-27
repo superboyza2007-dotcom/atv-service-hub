@@ -47,10 +47,14 @@ export function SpeechSettingsProvider({ children }: { children: ReactNode }) {
 
     const readableTarget = (node: EventTarget | null) => {
       if (!(node instanceof HTMLElement)) return null;
-      const target = node.closest("button, a, [role=button], label, summary, [tabindex]") as HTMLElement | null;
-      if (!target || target.closest("[aria-hidden=true]") || target.matches("input, select, textarea, option")) return null;
+      if (node.closest("[aria-hidden=true]") || node.matches("input, select, textarea, option, video, audio")) return null;
+      const interactive = node.closest("button, a, [role=button], label, summary, [tabindex]") as HTMLElement | null;
+      const textElement = node.closest("h1, h2, h3, h4, h5, h6, p, span, strong, b, em, small, td, th, li, legend, label, summary") as HTMLElement | null;
+      const target = interactive || textElement || (node.childElementCount === 0 ? node : null);
+      if (!target || target.matches("input, select, textarea, option")) return null;
       const text = (target.getAttribute("aria-label") || target.innerText || target.textContent || "").replace(/\s+/g, " ").trim();
-      return text ? { target, text: text.slice(0, 500) } : null;
+      if (!text || text.length > 500) return null;
+      return { target, text, interactive: Boolean(interactive) };
     };
 
     const replayNormalClick = (target: HTMLElement) => {
@@ -72,9 +76,13 @@ export function SpeechSettingsProvider({ children }: { children: ReactNode }) {
         if (pendingTimer !== undefined) window.clearTimeout(pendingTimer);
         pendingTarget = null;
         pendingTimer = undefined;
-        event.preventDefault();
-        event.stopPropagation();
-        replayNormalClick(item.target);
+        if (item.interactive) {
+          event.preventDefault();
+          event.stopPropagation();
+          replayNormalClick(item.target);
+        } else {
+          speakThai(item.text);
+        }
         return;
       }
       if (pendingTimer !== undefined) window.clearTimeout(pendingTimer);
@@ -83,6 +91,7 @@ export function SpeechSettingsProvider({ children }: { children: ReactNode }) {
       event.stopPropagation();
       pendingTimer = window.setTimeout(() => {
         speakThai(item.text);
+        if (!item.interactive) pendingTarget = null;
         pendingTarget = null;
         pendingTimer = undefined;
       }, doubleClickWindowMs);
