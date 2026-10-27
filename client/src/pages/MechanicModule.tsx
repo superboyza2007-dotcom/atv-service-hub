@@ -356,7 +356,7 @@ export default function MechanicModule() {
   const managerRecipients = (vehicleNumber: number, state: VehicleResponsibilityState = vehicleState) => recipientsForVehicleGroup(vehicleNumber, state.responsibilityGroups, directoryUsers);
   const editingRepairVehicleNumber = editingRepairId ? localState.repairs.find(repair => repair.id === editingRepairId)?.vehicleNumber : undefined;
   const repairCandidates = vehicles.filter(vehicle => isSelectableForNewRepair(vehicle, new Set(), editingRepairVehicleNumber));
-  const guideRepairRows = guideRepairReports.filter(report => isGuideRepairReportPending(report, localState.repairs)).map(report => {
+  const guideRepairRows = guideRepairReports.filter(report => isGuideRepairReportPending(report, localState.repairs) || repairBoardStages[report.id] === "รออะไหล่ใช้งานได้" || repairBoardStages[report.id] === "รออะไหล่ห้ามใช้งาน").map(report => {
     const vehicleNumber = extractGuideVehicleNumber(report.vehicleId) ?? 0;
     const vehicle = vehicles.find(item => item.number === vehicleNumber);
     return { ...report, vehicleNumber, cc: vehicle?.cc ?? "", manager: managerName(vehicleNumber) };
@@ -388,6 +388,9 @@ export default function MechanicModule() {
     },
   ];
   const alertRecords: AlertRecord[] = safetyNotices.map(notice => ({ ...notice }));
+  const editingAlert = editingAlertId ? localState.alerts.find(alert => alert.id === editingAlertId) : undefined;
+  const showWaitingPartsColumns = Boolean(repairBoardPendingAlertId) || alertRecords.some(alert => alert.source === "waiting-available") || editingAlert?.source === "waiting-available";
+  const showWaitingPartsEntryColumns = Boolean(repairBoardPendingAlertId) || editingAlert?.source === "waiting-available";
   const visibleRepairLogs = filterActiveMechanicRepairs(localState.repairs);
   const repairLogRecords = getMechanicRepairLog(localState.repairs);
   const sheetRows = [
@@ -544,6 +547,7 @@ export default function MechanicModule() {
     const now = new Date().toISOString();
     const existing = localState.alerts.find(alert => alert.id === editingAlertId);
     const fromWaitingAvailable = Boolean(repairBoardPendingAlertId);
+    const isWaitingPartsRecord = fromWaitingAvailable || existing?.source === "waiting-available";
     const notice: VehicleSafetyNotice = {
       id: existing?.id ?? (fromWaitingAvailable ? repairBoardPendingAlertId! : `${"AL"}-${Date.now()}`),
       source: existing?.source ?? (fromWaitingAvailable ? "waiting-available" : "manual"),
@@ -554,18 +558,18 @@ export default function MechanicModule() {
       reporter: currentMechanicActor.name,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
-      waitingParts: alertWaitingParts,
-      waitingPartDetail: alertWaitingPartDetail.trim() || undefined,
+      waitingParts: isWaitingPartsRecord ? true : undefined,
+      waitingPartDetail: isWaitingPartsRecord ? (alertWaitingPartDetail.trim() || undefined) : undefined,
     };
     const nextNotices = upsertVehicleSafetyNotice(safetyNotices, notice);
     setSafetyNotices(nextNotices);
-    if (!isMechanicDemo && !editingAlertId) void createRepairWorkflowMutation.mutateAsync({ id: notice.id, source: fromWaitingAvailable ? "waiting-parts-usable" : "manual-alert", sourceRepairReportId: repairBoardPendingAlertId, vehicleNumber, description: notice.description, reporter: notice.reporter, requestedPart: fromWaitingAvailable ? (notice.waitingPartDetail || notice.description) : notice.waitingPartDetail, status: fromWaitingAvailable ? "waiting_parts_usable" : "reported" }).catch(() => undefined);
+    if (!isMechanicDemo && !editingAlertId) void createRepairWorkflowMutation.mutateAsync({ id: notice.id, source: fromWaitingAvailable ? "waiting-parts-usable" : "manual-alert", sourceRepairReportId: repairBoardPendingAlertId, vehicleNumber, description: notice.description, reporter: notice.reporter, requestedPart: notice.waitingPartDetail, status: fromWaitingAvailable ? "waiting_parts_usable" : "reported" }).catch(() => undefined);
     saveVehicleFlowSnapshotMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.vehicleFlow, payload: serializeOperationsSnapshot({ safetyNotices: nextNotices }) });
     const nextLocalState: MechanicLocalState = {
       ...localState,
       alerts: editingAlertId
-          ? localState.alerts.map(alert => alert.id === editingAlertId ? { ...alert, vehicleNumber, description: alertDescription.trim(), reporter: currentMechanicActor.name, source: notice.source, sourceRepairReportId: notice.sourceRepairReportId, waitingParts: alertWaitingParts, waitingPartDetail: notice.waitingPartDetail } : alert)
-        : [{ id: notice.id, vehicleNumber, description: alertDescription.trim(), severity: "ปกติ", reporter: currentMechanicActor.name, createdAt: now, source: notice.source, sourceRepairReportId: notice.sourceRepairReportId, waitingParts: alertWaitingParts, waitingPartDetail: notice.waitingPartDetail }, ...localState.alerts],
+          ? localState.alerts.map(alert => alert.id === editingAlertId ? { ...alert, vehicleNumber, description: alertDescription.trim(), reporter: currentMechanicActor.name, source: notice.source, sourceRepairReportId: notice.sourceRepairReportId, waitingParts: notice.waitingParts, waitingPartDetail: notice.waitingPartDetail } : alert)
+        : [{ id: notice.id, vehicleNumber, description: alertDescription.trim(), severity: "ปกติ", reporter: currentMechanicActor.name, createdAt: now, source: notice.source, sourceRepairReportId: notice.sourceRepairReportId, waitingParts: notice.waitingParts, waitingPartDetail: notice.waitingPartDetail }, ...localState.alerts],
     };
     setLocalState(nextLocalState);
     if (repairBoardPendingAlertId) {
@@ -916,9 +920,9 @@ export default function MechanicModule() {
   const chooseRepairBoardUsableWait = (report: GuideRepairReport) => {
     resetAlertForm();
     setAlertVehicle(guideRepairVehicleSelection(report.vehicleId));
-    setAlertDescription(`รถ #${extractGuideVehicleNumber(report.vehicleId) ?? ""} รออะไหล่ แต่ยังใช้งานได้ · ${report.description}`);
+    setAlertDescription("");
     setAlertWaitingParts(true);
-    setAlertWaitingPartDetail(repairBoardOutcomeDetails[report.id] || report.description);
+    setAlertWaitingPartDetail("");
     setRepairBoardPendingAlertId(report.id);
     closeRepairBoardReport();
     setTab("tips");
@@ -985,12 +989,12 @@ export default function MechanicModule() {
         {tab === "tips" && <>
           <div className="mechanic-sheet-label alert-label">เตือนระวัง</div>
           <div className="mechanic-sheet-action-row"><button onClick={resetAlertForm}><Plus size={15} /> เพิ่มรายการ</button><span>{editingAlertId ? "กำลังแก้ไขรายการ" : "เพิ่มรายการเตือนระวัง"}</span></div>
-          <table className="mechanic-sheet-table mechanic-entry-table" aria-label="เพิ่มรายการเตือน"><thead><tr><th>เลือกเบอร์รถ</th><th>cc</th><th>ชื่อผู้ดูแล</th><th>รายละเอียด</th><th>รออะไหล่</th><th>อะไหล่ที่รอ</th><th>ชื่อช่างผู้แจ้ง</th><th>วันที่และเวลาแจ้ง</th><th>บันทึก</th></tr></thead><tbody><tr>
+          <table className="mechanic-sheet-table mechanic-entry-table" aria-label="เพิ่มรายการเตือน"><thead><tr><th>เลือกเบอร์รถ</th><th>cc</th><th>ชื่อผู้ดูแล</th><th>รายละเอียด</th>{showWaitingPartsEntryColumns && <><th>รออะไหล่</th><th>อะไหล่ที่รอ</th></>}<th>ชื่อช่างผู้แจ้ง</th><th>วันที่และเวลาแจ้ง</th><th>บันทึก</th></tr></thead><tbody><tr>
             <td><VehicleChoicePicker items={vehicles.map(vehicle => ({ id: String(vehicle.number), number: vehicle.number, cc: vehicle.cc, statusLabel: "รถในระบบ", fallbackGroupLabel: vehicleResponsibilityMeta(vehicle.number).groupLabel, fallbackManagers: vehicleResponsibilityMeta(vehicle.number).managerLabel.split(" · "), accentColor: getResponsibilityGroupColor(vehicle.number, vehicleState.responsibilityGroups), safetyNotices }))} selectedId={alertVehicle || undefined} responsibilityGroups={vehicleState.responsibilityGroups} managerDirectory={directoryUsers} onSafetyNoticeOpen={openSafetyNotices} onSelect={setAlertVehicle} ariaLabel="เลือกเบอร์รถสำหรับเตือนระวัง" placeholder="เลือกเบอร์รถ" /></td>
-            <td>{vehicles.find(vehicle => vehicle.number === Number(alertVehicle))?.cc ?? ""}</td><td>{alertVehicle ? <><span>{vehicleResponsibilityMeta(Number(alertVehicle)).groupLabel}</span><small>{vehicleResponsibilityMeta(Number(alertVehicle)).managerLabel}</small></> : ""}</td><td><input value={alertDescription} onChange={event => setAlertDescription(event.target.value)} aria-label="รายละเอียด" /></td><td><label className="mechanic-waiting-parts-toggle"><input type="checkbox" checked={alertWaitingParts} onChange={event => setAlertWaitingParts(event.target.checked)} aria-label="ระบุว่ารออะไหล่" /><span>{alertWaitingParts ? "รออะไหล่" : "ไม่รอ"}</span></label></td><td><input value={alertWaitingPartDetail} onChange={event => setAlertWaitingPartDetail(event.target.value)} aria-label="อะไหล่ที่รอ" placeholder="เช่น ผ้าเบรกหน้า" disabled={!alertWaitingParts} /></td><td><input value={currentMechanicActor.name} readOnly aria-readonly="true" aria-label="ชื่อช่างผู้แจ้ง" /></td><td>{new Date().toLocaleDateString("th-TH")}</td><td><button className="sheet-save" disabled={!alertVehicle || !alertDescription.trim()} onClick={saveAlert}><Save size={14} /> บันทึก</button></td>
+            <td>{vehicles.find(vehicle => vehicle.number === Number(alertVehicle))?.cc ?? ""}</td><td>{alertVehicle ? <><span>{vehicleResponsibilityMeta(Number(alertVehicle)).groupLabel}</span><small>{vehicleResponsibilityMeta(Number(alertVehicle)).managerLabel}</small></> : ""}</td><td><input value={alertDescription} onChange={event => setAlertDescription(event.target.value)} aria-label="รายละเอียด" />{showWaitingPartsEntryColumns && <small>กรอกเองเมื่อมาจากรออะไหล่ใช้งานได้</small>}</td>{showWaitingPartsEntryColumns && <><td><span className="mechanic-waiting-parts-badge is-waiting">รออะไหล่</span></td><td><input value={alertWaitingPartDetail} onChange={event => setAlertWaitingPartDetail(event.target.value)} aria-label="อะไหล่ที่รอ" placeholder="กรอกเอง (ถ้ามี)" /></td></>}<td><input value={currentMechanicActor.name} readOnly aria-readonly="true" aria-label="ชื่อช่างผู้แจ้ง" /></td><td>{new Date().toLocaleDateString("th-TH")}</td><td><button className="sheet-save" disabled={!alertVehicle || !alertDescription.trim()} onClick={saveAlert}><Save size={14} /> บันทึก</button></td>
           </tr></tbody></table>
-          <table className="mechanic-sheet-table" aria-label="รายการเตือนระวัง"><thead><tr><th>ID รายการ</th><th>เลขรถ</th><th>cc</th><th>ชื่อผู้ดูแล</th><th>รายละเอียด</th><th>รออะไหล่</th><th>อะไหล่ที่รอ</th><th>ชื่อช่างผู้แจ้ง</th><th>วันที่และเวลาแจ้ง</th><th>ลบ</th><th>แก้ไข</th></tr></thead><tbody>
-            {alertRecords.length ? alertRecords.map(alert => <tr key={alert.id}><td><code>{alert.id}</code><small>{alert.source === "waiting-available" ? "จากรออะไหล่ใช้งานได้" : "เพิ่มรายการเตือนปกติ"}</small></td><td><span className="supervisor-status-vehicle-number"><b className="supervisor-colored-vehicle-number" style={{ color: getResponsibilityGroupColor(Number(alert.vehicleNumber), vehicleState.responsibilityGroups), borderColor: getResponsibilityGroupColor(Number(alert.vehicleNumber), vehicleState.responsibilityGroups) }}>#{alert.vehicleNumber}</b><VehicleSafetyNoticeIndicator notices={safetyNotices} vehicleNumber={Number(alert.vehicleNumber)} accentColor={getResponsibilityGroupColor(Number(alert.vehicleNumber), vehicleState.responsibilityGroups)} onOpen={openSafetyNotices} /></span></td><td>{vehicles.find(vehicle => vehicle.number === alert.vehicleNumber)?.cc ?? ""}</td><td><span>{vehicleResponsibilityMeta(alert.vehicleNumber).groupLabel}</span><small>{vehicleResponsibilityMeta(alert.vehicleNumber).managerLabel}</small></td><td>{alert.description}</td><td><span className={`mechanic-waiting-parts-badge ${alert.waitingParts ? "is-waiting" : "is-not-waiting"}`}>{alert.waitingParts ? "รออะไหล่" : "ไม่รอ"}</span></td><td>{alert.waitingPartDetail || "—"}</td><td>{alert.reporter}</td><td>{formatThaiDate(alert.createdAt)}</td><td><button className="sheet-danger" onClick={() => deleteAlert(alert)}><Trash2 size={14} /> ลบ</button></td><td><button className="sheet-edit" onClick={() => editAlert(alert)}><Pencil size={14} /> แก้ไข</button></td></tr>) : <tr><td colSpan={11} className="sheet-empty">ยังไม่มีรายการเตือนระวัง</td></tr>}
+          <table className="mechanic-sheet-table" aria-label="รายการเตือนระวัง"><thead><tr><th>ID รายการ</th><th>เลขรถ</th><th>cc</th><th>ชื่อผู้ดูแล</th><th>รายละเอียด</th>{showWaitingPartsColumns && <><th>รออะไหล่</th><th>อะไหล่ที่รอ</th></>}<th>ชื่อช่างผู้แจ้ง</th><th>วันที่และเวลาแจ้ง</th><th>ลบ</th><th>แก้ไข</th></tr></thead><tbody>
+            {alertRecords.length ? alertRecords.map(alert => <tr key={alert.id}><td><code>{alert.id}</code><small>{alert.source === "waiting-available" ? "จากรออะไหล่ใช้งานได้" : "เพิ่มรายการเตือนปกติ"}</small></td><td><span className="supervisor-status-vehicle-number"><b className="supervisor-colored-vehicle-number" style={{ color: getResponsibilityGroupColor(Number(alert.vehicleNumber), vehicleState.responsibilityGroups), borderColor: getResponsibilityGroupColor(Number(alert.vehicleNumber), vehicleState.responsibilityGroups) }}>#{alert.vehicleNumber}</b><VehicleSafetyNoticeIndicator notices={safetyNotices} vehicleNumber={Number(alert.vehicleNumber)} accentColor={getResponsibilityGroupColor(Number(alert.vehicleNumber), vehicleState.responsibilityGroups)} onOpen={openSafetyNotices} /></span></td><td>{vehicles.find(vehicle => vehicle.number === alert.vehicleNumber)?.cc ?? ""}</td><td><span>{vehicleResponsibilityMeta(alert.vehicleNumber).groupLabel}</span><small>{vehicleResponsibilityMeta(alert.vehicleNumber).managerLabel}</small></td><td>{alert.description}</td>{showWaitingPartsColumns && <><td>{alert.source === "waiting-available" ? <span className="mechanic-waiting-parts-badge is-waiting">รออะไหล่</span> : "—"}</td><td>{alert.source === "waiting-available" ? (alert.waitingPartDetail || "—") : "—"}</td></>}<td>{alert.reporter}</td><td>{formatThaiDate(alert.createdAt)}</td><td><button className="sheet-danger" onClick={() => deleteAlert(alert)}><Trash2 size={14} /> ลบ</button></td><td><button className="sheet-edit" onClick={() => editAlert(alert)}><Pencil size={14} /> แก้ไข</button></td></tr>) : <tr><td colSpan={showWaitingPartsColumns ? 11 : 9} className="sheet-empty">ยังไม่มีรายการเตือนระวัง</td></tr>}
           </tbody></table>
         </>}
 
