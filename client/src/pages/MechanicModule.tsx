@@ -356,7 +356,7 @@ export default function MechanicModule() {
   const managerRecipients = (vehicleNumber: number, state: VehicleResponsibilityState = vehicleState) => recipientsForVehicleGroup(vehicleNumber, state.responsibilityGroups, directoryUsers);
   const editingRepairVehicleNumber = editingRepairId ? localState.repairs.find(repair => repair.id === editingRepairId)?.vehicleNumber : undefined;
   const repairCandidates = vehicles.filter(vehicle => isSelectableForNewRepair(vehicle, new Set(), editingRepairVehicleNumber));
-  const guideRepairRows = guideRepairReports.filter(report => isGuideRepairReportPending(report, localState.repairs)).map(report => {
+  const guideRepairRows = guideRepairReports.filter(report => isGuideRepairReportPending(report, localState.repairs) || repairBoardStages[report.id] === "รออะไหล่ใช้งานได้" || repairBoardStages[report.id] === "รออะไหล่ห้ามใช้งาน").map(report => {
     const vehicleNumber = extractGuideVehicleNumber(report.vehicleId) ?? 0;
     const vehicle = vehicles.find(item => item.number === vehicleNumber);
     return { ...report, vehicleNumber, cc: vehicle?.cc ?? "", manager: managerName(vehicleNumber) };
