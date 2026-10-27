@@ -656,17 +656,21 @@ export default function MechanicModule() {
           : createRepairWorkflowMutation.mutateAsync({ id: repairId, source: selectedGuideRepairId ? "guide-report" : "manual-alert", sourceRepairReportId: selectedGuideRepairId, vehicleNumber, description: nextRepair.symptom, reporter: mechanicName, requestedPart: parts || undefined, status: "completed" });
       void workflowRequest.catch(() => undefined);
     }
-    const completedWaitingAlertId = repairBoardRepairCompletionId;
+    const selectedWaitingReportId = selectedGuideRepairId && (repairBoardStages[selectedGuideRepairId] === "รออะไหล่ใช้งานได้" || repairBoardStages[selectedGuideRepairId] === "รออะไหล่ห้ามใช้งาน") ? selectedGuideRepairId : undefined;
+    const completedWaitingAlertId = repairBoardRepairCompletionId ?? selectedWaitingReportId;
+    const completedWaitingNoticeIds = completedWaitingAlertId
+      ? new Set([completedWaitingAlertId, ...safetyNotices.filter(notice => notice.sourceRepairReportId === completedWaitingAlertId).map(notice => notice.id)])
+      : undefined;
     const nextLocalState: MechanicLocalState = {
       ...localState,
-      alerts: completedWaitingAlertId ? localState.alerts.filter(alert => alert.id !== completedWaitingAlertId) : localState.alerts,
+      alerts: completedWaitingNoticeIds ? localState.alerts.filter(alert => !completedWaitingNoticeIds.has(alert.id)) : localState.alerts,
       repairs: editingRepairId
         ? localState.repairs.map(repair => repair.id === editingRepairId ? nextRepair : repair)
         : [nextRepair, ...localState.repairs],
     };
     setLocalState(nextLocalState);
     if (completedWaitingAlertId) {
-      const nextSafetyNotices = removeVehicleSafetyNotice(safetyNotices, completedWaitingAlertId);
+      const nextSafetyNotices = safetyNotices.filter(notice => !completedWaitingNoticeIds?.has(notice.id) && notice.sourceRepairReportId !== completedWaitingAlertId);
       setSafetyNotices(nextSafetyNotices);
       saveVehicleFlowSnapshotMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.vehicleFlow, payload: serializeOperationsSnapshot({ safetyNotices: nextSafetyNotices }) });
       const nextStages = { ...repairBoardStages };
