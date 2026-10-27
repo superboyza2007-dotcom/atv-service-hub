@@ -14152,3 +14152,8 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
 .supervisor-timer-policy-options small, .supervisor-timer-settings-note, .supervisor-timer-settings-error { color: rgba(239, 255, 243, .68); font-size: 11px; line-height: 1.5; }
 .supervisor-timer-settings-error { color: #ffb8a6; }
 .supervisor-timer-settings .speech-settings-actions span { display: inline-flex; align-items: center; gap: 5px; }
+.supervisor-standby-creator .m3-guide-21-vehicle-tile { position: relative; }
+.supervisor-standby-creator .m3-guide-21-selected-check { position: absolute; top: 4px; right: 4px; z-index: 2; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #a6ffb5; color: #082317; box-shadow: 0 1px 5px rgba(0, 0, 0, .55); pointer-events: none; }
+@media (max-width: 520px) {
+  .supervisor-standby-creator .m3-guide-21-selected-check { top: 2px; right: 2px; width: 16px; height: 16px; }
+}
