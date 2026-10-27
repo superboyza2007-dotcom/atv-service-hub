@@ -547,7 +547,7 @@ export default function MechanicModule() {
     const now = new Date().toISOString();
     const existing = localState.alerts.find(alert => alert.id === editingAlertId);
     const fromWaitingAvailable = Boolean(repairBoardPendingAlertId);
-    const isWaitingPartsRecord = fromWaitingAvailable || existing?.source === "waiting-available";
+    const isWaitingPartsFlow = fromWaitingAvailable || existing?.source === "waiting-available";
     const notice: VehicleSafetyNotice = {
       id: existing?.id ?? (fromWaitingAvailable ? repairBoardPendingAlertId! : `${"AL"}-${Date.now()}`),
       source: existing?.source ?? (fromWaitingAvailable ? "waiting-available" : "manual"),
@@ -558,18 +558,20 @@ export default function MechanicModule() {
       reporter: currentMechanicActor.name,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
-      waitingParts: isWaitingPartsRecord ? true : undefined,
-      waitingPartDetail: isWaitingPartsRecord ? (alertWaitingPartDetail.trim() || undefined) : undefined,
+      waitingParts: isWaitingPartsFlow ? true : undefined,
+      waitingPartDetail: isWaitingPartsFlow ? (alertWaitingPartDetail.trim() || undefined) : undefined,
     };
-    const nextNotices = upsertVehicleSafetyNotice(safetyNotices, notice);
+    const nextNotices = isWaitingPartsFlow ? removeVehicleSafetyNotice(safetyNotices, notice.id) : upsertVehicleSafetyNotice(safetyNotices, notice);
     setSafetyNotices(nextNotices);
     if (!isMechanicDemo && !editingAlertId) void createRepairWorkflowMutation.mutateAsync({ id: notice.id, source: fromWaitingAvailable ? "waiting-parts-usable" : "manual-alert", sourceRepairReportId: repairBoardPendingAlertId, vehicleNumber, description: notice.description, reporter: notice.reporter, requestedPart: notice.waitingPartDetail, status: fromWaitingAvailable ? "waiting_parts_usable" : "reported" }).catch(() => undefined);
     saveVehicleFlowSnapshotMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.vehicleFlow, payload: serializeOperationsSnapshot({ safetyNotices: nextNotices }) });
     const nextLocalState: MechanicLocalState = {
       ...localState,
-      alerts: editingAlertId
+      alerts: isWaitingPartsFlow
+        ? localState.alerts.filter(alert => alert.id !== notice.id)
+        : editingAlertId
           ? localState.alerts.map(alert => alert.id === editingAlertId ? { ...alert, vehicleNumber, description: alertDescription.trim(), reporter: currentMechanicActor.name, source: notice.source, sourceRepairReportId: notice.sourceRepairReportId, waitingParts: notice.waitingParts, waitingPartDetail: notice.waitingPartDetail } : alert)
-        : [{ id: notice.id, vehicleNumber, description: alertDescription.trim(), severity: "ปกติ", reporter: currentMechanicActor.name, createdAt: now, source: notice.source, sourceRepairReportId: notice.sourceRepairReportId, waitingParts: notice.waitingParts, waitingPartDetail: notice.waitingPartDetail }, ...localState.alerts],
+          : [{ id: notice.id, vehicleNumber, description: alertDescription.trim(), severity: "ปกติ", reporter: currentMechanicActor.name, createdAt: now, source: notice.source, sourceRepairReportId: notice.sourceRepairReportId, waitingParts: notice.waitingParts, waitingPartDetail: notice.waitingPartDetail }, ...localState.alerts],
     };
     setLocalState(nextLocalState);
     if (repairBoardPendingAlertId) {
