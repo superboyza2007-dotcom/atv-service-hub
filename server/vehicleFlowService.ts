@@ -12,6 +12,7 @@ import {
   type VehicleStatus,
 } from "../drizzle/schema";
 import { getDb } from "./db";
+import { getSupervisorTimerSettings } from "./supervisorTimerSettings";
 import {
   assertVehicleTransition,
   type AppRole,
@@ -273,10 +274,13 @@ export async function createVehicleSession(input: {
   startImmediately: boolean;
 }) {
   const db = await requireDatabase();
+  const timerSettings = await getSupervisorTimerSettings();
   const inserted = await db.insert(vehicleSessions).values({
     sessionCode: input.sessionCode,
     status: input.startImmediately ? "active" : "standby",
     durationMinutes: input.durationMinutes,
+    timerEnabled: timerSettings.enabled,
+    expiryBehavior: timerSettings.expiryBehavior,
     createdByUserId: input.actor.id,
     startedAt: input.startImmediately ? new Date() : null,
   });
@@ -296,10 +300,11 @@ export async function createVehicleSession(input: {
 
 export async function activateVehicleSession(input: { sessionId: number; actor: VehicleActor }) {
   const db = await requireDatabase();
+  const timerSettings = await getSupervisorTimerSettings();
   const session = (await db.select().from(vehicleSessions).where(eq(vehicleSessions.id, input.sessionId)).limit(1))[0];
   if (!session) throw new Error("ไม่พบรายการ Session");
   if (session.status !== "standby") throw new VehicleFlowRuleError("Session นี้ไม่อยู่ในสถานะ Standby");
-  await db.update(vehicleSessions).set({ status: "active", startedAt: new Date() }).where(eq(vehicleSessions.id, input.sessionId));
+  await db.update(vehicleSessions).set({ status: "active", startedAt: new Date(), timerEnabled: timerSettings.enabled, expiryBehavior: timerSettings.expiryBehavior }).where(eq(vehicleSessions.id, input.sessionId));
 }
 
 export async function cancelVehicleSession(input: { sessionId: number; actor: VehicleActor }) {
@@ -371,7 +376,7 @@ export async function completeVehicleSession(input: { sessionId: number; actor: 
 export async function reconcileExpiredVehicleSessions(now = new Date()) {
   const db = await requireDatabase();
   const activeSessions = await db.select().from(vehicleSessions).where(eq(vehicleSessions.status, "active"));
-  const expired = activeSessions.filter(session => session.startedAt && session.startedAt.getTime() + session.durationMinutes * 60_000 <= now.getTime());
+  const expired = activeSessions.filter(session => session.timerEnabled && session.expiryBehavior === "auto_complete" && session.startedAt && session.startedAt.getTime() + session.durationMinutes * 60_000 <= now.getTime());
   let returnedVehicleCount = 0;
 
   for (const session of expired) {

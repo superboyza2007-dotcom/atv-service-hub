@@ -26,6 +26,7 @@ import { getActiveQueueBridgeSnapshot } from "./activeSourceBridge";
 import { isRepairLogSheetConfigured, repairLogPayloadSchema, submitRepairLogSheetPayload } from "./repairLogGoogleSheets";
 import { cancelFutureDiceSession, chooseFutureDiceOutcome, createFutureDiceSession, getFutureDiceInvitationForUser, getFutureDiceSession, isFutureDiceRuleError, listFutureDiceSessions, rollFutureDice, setFutureDiceOutcomeType, type FutureDiceActor } from "./futureDiceService";
 import { createRepairWorkflowItem, completeRepairWorkflowItem, listRepairWorkflowItems, transitionRepairWorkflowItem, REPAIR_WORKFLOW_STATUSES } from "./repairWorkflowService";
+import { normalizeSupervisorTimerSettings, SUPERVISOR_TIMER_SETTINGS_SNAPSHOT_KEY } from "../shared/supervisor-timer-settings";
 
 const vehicleActor = (user: { id: number; role: "user" | "guide" | "mechanic" | "supervisor" | "admin" }) => ({
   id: user.id,
@@ -257,6 +258,26 @@ export const appRouter = router({
   operationalHistory: router({
     list: appProtectedProcedure.input(z.object({ limit: z.number().int().min(1).max(500).optional() }).optional()).query(({ input }) => listOperationalHistory(input?.limit ?? 200)),
     record: appProtectedProcedure.input(z.object({ eventType: z.string().trim().min(1).max(64), module: z.enum(["guide", "mechanic", "supervisor", "system"]), sessionId: z.number().int().positive().optional(), vehicleId: z.number().int().positive().optional(), payload: z.string().max(32_000) })).mutation(({ ctx, input }) => appendOperationalHistory({ ...input, actorDirectoryUserId: ctx.appUser?.id })),
+  }),
+  supervisorTimerSettings: router({
+    get: appProtectedProcedure.query(async () => {
+      const payload = await getAppOperationsSnapshot(SUPERVISOR_TIMER_SETTINGS_SNAPSHOT_KEY);
+      let value: unknown;
+      try { value = payload ? JSON.parse(payload) : undefined; } catch { value = undefined; }
+      return normalizeSupervisorTimerSettings(value);
+    }),
+    update: appProtectedProcedure.input(z.object({
+      enabled: z.boolean(),
+      defaultDurationMinutes: z.union([z.literal(30), z.literal(60)]),
+      expiryBehavior: z.enum(["auto_complete", "overtime"]),
+    })).mutation(async ({ ctx, input }) => {
+      const group = ctx.appUser?.userGroup ?? "";
+      const isSupervisor = ctx.appSpecialAccess || ctx.user?.role === "admin" || ctx.user?.role === "supervisor" || group.includes("หัวหน้า");
+      if (!isSupervisor) throw new TRPCError({ code: "FORBIDDEN", message: "Supervisor permission required" });
+      const settings = normalizeSupervisorTimerSettings(input);
+      await upsertAppOperationsSnapshot(SUPERVISOR_TIMER_SETTINGS_SNAPSHOT_KEY, JSON.stringify(settings));
+      return settings;
+    }),
   }),
   activeBridge: router({
     snapshot: appProtectedProcedure.query(() => getActiveQueueBridgeSnapshot()),

@@ -14134,3 +14134,21 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
 .speech-settings-actions span { color: rgba(239, 255, 243, .58); font-size: 11px; }
 .speech-settings-actions button:disabled { opacity: .5; cursor: not-allowed; }
 .supervisor-settings-stack { display: grid; gap: 16px; }
+.supervisor-timer-settings-options fieldset { display: grid; gap: 10px; margin: 0; padding: 0; border: 0; }
+.supervisor-timer-settings-options fieldset:disabled { opacity: .48; }
+.supervisor-timer-settings-options legend { margin: 0 0 8px; color: #effff3; font-size: 13px; font-weight: 700; }
+.supervisor-timer-expiry-legend { margin-top: 10px !important; }
+.supervisor-timer-choice-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.supervisor-timer-choice-row button { display: flex; align-items: baseline; justify-content: center; gap: 7px; min-height: 48px; border: 1px solid rgba(141, 240, 173, .22); border-radius: 9px; background: rgba(0, 0, 0, .14); color: #effff3; cursor: pointer; }
+.supervisor-timer-choice-row button.selected { border-color: #8df0ad; background: rgba(63, 217, 120, .16); box-shadow: inset 0 0 0 1px rgba(141, 240, 173, .2); }
+.supervisor-timer-choice-row button strong { font-size: 18px; }
+.supervisor-timer-choice-row button span { color: rgba(239, 255, 243, .68); font-size: 12px; }
+.supervisor-timer-policy-options { display: grid; gap: 8px; }
+.supervisor-timer-policy-options label { display: flex; align-items: flex-start; gap: 10px; padding: 11px; border: 1px solid rgba(141, 240, 173, .18); border-radius: 9px; background: rgba(0, 0, 0, .12); cursor: pointer; }
+.supervisor-timer-policy-options label.selected { border-color: #8df0ad; background: rgba(63, 217, 120, .12); }
+.supervisor-timer-policy-options input { margin-top: 3px; accent-color: #3fd978; }
+.supervisor-timer-policy-options span { display: grid; gap: 4px; }
+.supervisor-timer-policy-options strong { font-size: 13px; }
+.supervisor-timer-policy-options small, .supervisor-timer-settings-note, .supervisor-timer-settings-error { color: rgba(239, 255, 243, .68); font-size: 11px; line-height: 1.5; }
+.supervisor-timer-settings-error { color: #ffb8a6; }
+.supervisor-timer-settings .speech-settings-actions span { display: inline-flex; align-items: center; gap: 5px; }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, CalendarClock, Check, ChevronDown, Plus, Search } from "lucide-react";
 import { isSelectableForNewSession, isVehicleOperationallyReadyStatus } from "@/lib/vehicle-selection-rules";
 import { VehicleSafetyNoticeIndicator } from "@/components/VehicleSafetyNotice";
@@ -21,9 +21,9 @@ export function CountPicker({ label, value, min, max, onChange }: { label: strin
   </div>;
 }
 
-type Props = { vehicles: SessionCreatorVehicle[]; members: SessionCreatorMember[]; busyVehicleNumbers: Set<number>; busyMemberIds?: Set<string>; creatorName: string; onBack: () => void; onCreate: (draft: SessionCreatorDraft) => void; roleLabel?: string; activeUserId?: string; activeUserName?: string; lockActiveUser?: boolean; safetyNotices?: VehicleSafetyNotice[]; onSafetyNoticeOpen?: (notices: VehicleSafetyNotice[]) => void };
+type Props = { vehicles: SessionCreatorVehicle[]; members: SessionCreatorMember[]; busyVehicleNumbers: Set<number>; busyMemberIds?: Set<string>; creatorName: string; onBack: () => void; onCreate: (draft: SessionCreatorDraft) => void; roleLabel?: string; activeUserId?: string; activeUserName?: string; lockActiveUser?: boolean; safetyNotices?: VehicleSafetyNotice[]; onSafetyNoticeOpen?: (notices: VehicleSafetyNotice[]) => void; defaultDurationMinutes?: 30 | 60 };
 
-export function SessionCreatorForm({ vehicles, members, busyVehicleNumbers, busyMemberIds = new Set<string>(), creatorName, onBack, onCreate, roleLabel = "Guide / Mechanic", activeUserId: initialActiveUserId = "", activeUserName = creatorName, lockActiveUser = false, safetyNotices = [], onSafetyNoticeOpen }: Props) {
+export function SessionCreatorForm({ vehicles, members, busyVehicleNumbers, busyMemberIds = new Set<string>(), creatorName, onBack, onCreate, roleLabel = "Guide / Mechanic", activeUserId: initialActiveUserId = "", activeUserName = creatorName, lockActiveUser = false, safetyNotices = [], onSafetyNoticeOpen, defaultDurationMinutes = 30 }: Props) {
   const [vehicleNumbers, setVehicleNumbers] = useState<number[]>([]);
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [vehicleSelectionMode, setVehicleSelectionMode] = useState<"grouped" | "number">("grouped");
@@ -33,7 +33,8 @@ export function SessionCreatorForm({ vehicles, members, busyVehicleNumbers, busy
   const [memberSearch, setMemberSearch] = useState("");
   const [error, setError] = useState("");
   const [pendingDraft, setPendingDraft] = useState<Omit<SessionCreatorDraft, "durationMinutes"> | null>(null);
-  const [selectedDuration, setSelectedDuration] = useState<30 | 60>(30);
+  const [selectedDuration, setSelectedDuration] = useState<30 | 60>(defaultDurationMinutes);
+  useEffect(() => setSelectedDuration(defaultDurationMinutes), [defaultDurationMinutes]);
   const selectableVehicles = useMemo(() => vehicles.filter(vehicle => isSelectableForNewSession(vehicle, busyVehicleNumbers, vehicle.number)), [vehicles, busyVehicleNumbers]);
   const inputVehicleGroups = useMemo(() => {
     const groups = new Map<string, { label: string; color: string; vehicles: SessionCreatorVehicle[] }>();

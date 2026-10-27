@@ -1,4 +1,4 @@
-import { foreignKey, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { boolean, foreignKey, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 export const VEHICLE_STATUS_VALUES = ["ready", "repair", "pickup", "active"] as const;
 export type VehicleStatus = (typeof VEHICLE_STATUS_VALUES)[number];
@@ -111,6 +111,8 @@ export const vehicleSessions = mysqlTable("vehicleSessions", {
   sessionCode: varchar("sessionCode", { length: 64 }).notNull(),
   status: mysqlEnum("vehicleSessionStatus", ["standby", "active", "completed", "cancelled"]).default("standby").notNull(),
   durationMinutes: int("durationMinutes").notNull(),
+  timerEnabled: boolean("timerEnabled").default(true).notNull(),
+  expiryBehavior: mysqlEnum("expiryBehavior", ["auto_complete", "overtime"]).default("auto_complete").notNull(),
   createdByUserId: int("createdByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
   startedAt: timestamp("startedAt"),
   completedAt: timestamp("completedAt"),

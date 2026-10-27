@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { vehicleFlowSchedules } from "../drizzle/schema";
 import { getDb } from "./db";
 import { reconcileExpiredVehicleSessions } from "./vehicleFlowService";
+import { reconcileExpiredGuideSnapshotSessions } from "./guideSessionReconcile";
 import { isMatchingScheduledTask } from "./scheduledTaskAuth";
 import { sdk } from "./_core/sdk";
 
@@ -26,8 +27,11 @@ export async function reconcileVehicleSessionsHandler(req: Request, res: Respons
       return res.json({ ok: true, skipped: "orphan-or-disabled", taskUid });
     }
 
-    const result = await reconcileExpiredVehicleSessions();
-    return res.json({ ok: true, ...result, taskUid });
+    const [result, guideResult] = await Promise.all([
+      reconcileExpiredVehicleSessions(),
+      reconcileExpiredGuideSnapshotSessions(),
+    ]);
+    return res.json({ ok: true, ...result, guideSnapshot: guideResult, taskUid });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return res.status(500).json({
