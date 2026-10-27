@@ -295,7 +295,11 @@ export default function GuideModule3() {
     return a.name.localeCompare(b.name, "th");
   });
   const activeUser = directoryUsers.find(user => String(user.id) === activeUserId);
-  const visibleRepairReports = useMemo(() => repairReports.filter(report => report.status !== "ซ่อมเสร็จ" && !report.completedAt), [repairReports]);
+  const visibleRepairReports = useMemo(() => repairReports.filter(report => {
+    const movedToWaitingParts = String(report.status) === "รออะไหล่ใช้งานได้"
+      || safetyNotices.some(notice => notice.waitingParts && (notice.id === report.id || notice.sourceRepairReportId === report.id));
+    return report.status !== "ซ่อมเสร็จ" && !report.completedAt && !movedToWaitingParts;
+  }), [repairReports, safetyNotices]);
   const { isAuthenticated: isOAuthAuthenticated, user: authenticatedUser } = useAuth();
   const isAuthenticated = Boolean(currentIdentity) || isOAuthAuthenticated;
   const authenticatedActor = authenticatedUser?.name ? { id: String(authenticatedUser.id), name: authenticatedUser.name } : undefined;
@@ -579,7 +583,7 @@ export default function GuideModule3() {
     const meta = vehicleResponsibilityMeta(number);
     const selected = selectedVehicleIds.includes(vehicle.id);
     const locked = busyVehicleIds.has(vehicle.id) && !editingVehicleIds.has(vehicle.id);
-    return <button key={vehicle.id} style={{ "--vehicle-accent": getResponsibilityGroupColor(number, responsibilityState.responsibilityGroups), borderColor: getResponsibilityGroupColor(number, responsibilityState.responsibilityGroups) } as CSSProperties} disabled={locked} className={`m3-guide-21-vehicle-tile ${vehicle.status} ${selected ? "selected m3-selected-vehicle" : ""} ${locked ? "locked" : ""} ${meta.groupLabel === "ยังไม่มีกลุ่ม" ? "unassigned" : ""}`} onClick={() => toggleVehicle(vehicle)}><span className="m3-lot-number-wrap"><b style={{ color: getResponsibilityGroupColor(number, responsibilityState.responsibilityGroups) }}>#{number}</b><VehicleSafetyNoticeIndicator notices={safetyNotices} vehicleNumber={number} accentColor={getResponsibilityGroupColor(number, responsibilityState.responsibilityGroups)} inline onOpen={notices => setSelectedSafetyNoticeId(notices[0]?.id)} /></span><small>{locked ? (sessions.find(session => session.vehicleIds.includes(vehicle.id) && session.status !== "Completed")?.status === "Active" ? "กำลัง Active" : "อยู่ใน Standby") : vehicle.status === "inspection" ? "พร้อมใช้ · มีคำแนะนำ" : "พร้อม"}</small><em>{meta.groupLabel}</em><em>{meta.managerLabel}</em></button>;
+    return <button key={vehicle.id} aria-pressed={selected} aria-label={`เบอร์รถ ${number}${selected ? " เลือกแล้ว" : ""}`} style={{ "--vehicle-accent": getResponsibilityGroupColor(number, responsibilityState.responsibilityGroups), borderColor: getResponsibilityGroupColor(number, responsibilityState.responsibilityGroups) } as CSSProperties} disabled={locked} className={`m3-guide-21-vehicle-tile ${vehicle.status} ${selected ? "selected m3-selected-vehicle" : ""} ${locked ? "locked" : ""} ${meta.groupLabel === "ยังไม่มีกลุ่ม" ? "unassigned" : ""}`} onClick={() => toggleVehicle(vehicle)}>{selected && <span className="m3-guide-21-selected-check" aria-hidden="true"><Check size={12} strokeWidth={3} /></span>}<span className="m3-lot-number-wrap"><b style={{ color: getResponsibilityGroupColor(number, responsibilityState.responsibilityGroups) }}>#{number}</b><VehicleSafetyNoticeIndicator notices={safetyNotices} vehicleNumber={number} accentColor={getResponsibilityGroupColor(number, responsibilityState.responsibilityGroups)} inline onOpen={notices => setSelectedSafetyNoticeId(notices[0]?.id)} /></span><small>{locked ? (sessions.find(session => session.vehicleIds.includes(vehicle.id) && session.status !== "Completed")?.status === "Active" ? "กำลัง Active" : "อยู่ใน Standby") : vehicle.status === "inspection" ? "พร้อมใช้ · มีคำแนะนำ" : "พร้อม"}</small><em>{meta.groupLabel}</em><em>{meta.managerLabel}</em></button>;
   };
 
   const updateCentralVehicleStatus = (vehicleIds: string[], status: SharedVehicleStatus) => {

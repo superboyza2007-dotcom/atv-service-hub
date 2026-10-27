@@ -45,7 +45,7 @@ export function VehicleSafetyNoticeList({ notices, vehicleNumbers, onOpen }: Veh
         <div className="vehicle-safety-inline-group" key={group.vehicleNumber}>
           <div className="vehicle-safety-inline-vehicle"><strong>รถ #{group.vehicleNumber}</strong><span>{group.notices.length} คำแนะนำ</span></div>
           {group.notices.map(notice => <button type="button" className={`vehicle-safety-inline-item ${notice.severity === "เร่งด่วน" ? "urgent" : "normal"}`} key={notice.id} onClick={() => onOpen(group.notices)}>
-            <span className="vehicle-safety-inline-item-topline"><b>{notice.severity === "เร่งด่วน" ? "เร่งด่วน" : "คำแนะนำ"}</b><small>{notice.reporter} · {new Date(notice.createdAt).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" })}</small></span>
+            <span className="vehicle-safety-inline-item-topline"><b>{notice.severity === "เร่งด่วน" ? "เร่งด่วน" : "คำแนะนำ"}</b>{notice.source === "waiting-available" && <small className="vehicle-safety-waiting-label">รออะไหล่</small>}<small>{notice.reporter} · {new Date(notice.createdAt).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" })}</small></span>
             <span>{notice.description}</span>
           </button>)}
         </div>
@@ -76,7 +76,7 @@ export function VehicleSafetyNoticeDialog({ notices, onClose }: VehicleSafetyNot
         <div className="vehicle-safety-dialog-list">
           {notices.map(notice => (
             <article key={notice.id} className={notice.severity === "เร่งด่วน" ? "urgent" : "normal"}>
-              <div><strong>{notice.severity === "เร่งด่วน" ? "เร่งด่วน" : "คำแนะนำ"}</strong><small>{notice.reporter} · {new Date(notice.createdAt).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" })}</small></div>
+              <div><strong>{notice.severity === "เร่งด่วน" ? "เร่งด่วน" : "คำแนะนำ"}</strong>{notice.source === "waiting-available" && <small className="vehicle-safety-waiting-label">รออะไหล่</small>}<small>{notice.reporter} · {new Date(notice.createdAt).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" })}</small></div>
               <p>{notice.description}</p>
             </article>
           ))}

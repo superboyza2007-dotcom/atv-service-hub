@@ -11271,6 +11271,7 @@ button:active {
 .vehicle-safety-dialog-list article strong { color: #ffc247; font-size: 11px; }
 .vehicle-safety-dialog-list article.urgent strong { color: #ff9da0; }
 .vehicle-safety-dialog-list article small { color: #9eafa4; font-size: 10px; text-align: right; }
+.vehicle-safety-dialog-list article .vehicle-safety-waiting-label { color: #ffd36d; font-weight: 800; }
 .vehicle-safety-dialog-list article p { margin: 8px 0 0; color: #f1f6ef; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
 .vehicle-safety-dialog-note { display: block; margin-top: 14px; color: #8fa399; font-size: 10px; line-height: 1.45; }
 @media (max-width: 520px) {
@@ -11493,6 +11494,7 @@ button:active {
 .vehicle-safety-inline-item-topline b { color: #ffd36d; font-size: 10px; }
 .vehicle-safety-inline-item.urgent .vehicle-safety-inline-item-topline b { color: #ffb5b7; }
 .vehicle-safety-inline-item-topline small { color: #b8c7bb; font-size: 9px; text-align: right; }
+.vehicle-safety-inline-item-topline .vehicle-safety-waiting-label { color: #ffd36d; font-weight: 800; }
 .vehicle-safety-inline-item > span:last-child { color: #f4fff2; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
 .vehicle-safety-inline-empty { margin: 0; color: #b9cdbd; font-size: 11px; }
 @media (max-width: 640px) {
@@ -14152,8 +14154,8 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
 .supervisor-timer-policy-options small, .supervisor-timer-settings-note, .supervisor-timer-settings-error { color: rgba(239, 255, 243, .68); font-size: 11px; line-height: 1.5; }
 .supervisor-timer-settings-error { color: #ffb8a6; }
 .supervisor-timer-settings .speech-settings-actions span { display: inline-flex; align-items: center; gap: 5px; }
-.supervisor-standby-creator .m3-guide-21-vehicle-tile { position: relative; }
-.supervisor-standby-creator .m3-guide-21-selected-check { position: absolute; top: 4px; right: 4px; z-index: 2; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #a6ffb5; color: #082317; box-shadow: 0 1px 5px rgba(0, 0, 0, .55); pointer-events: none; }
+.m3-guide-21-vehicle-tile { position: relative; }
+.m3-guide-21-vehicle-tile .m3-guide-21-selected-check { position: absolute; top: 4px; right: 4px; z-index: 2; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #a6ffb5; color: #082317; box-shadow: 0 1px 5px rgba(0, 0, 0, .55); pointer-events: none; }
 @media (max-width: 520px) {
-  .supervisor-standby-creator .m3-guide-21-selected-check { top: 2px; right: 2px; width: 16px; height: 16px; }
+  .m3-guide-21-vehicle-tile .m3-guide-21-selected-check { top: 2px; right: 2px; width: 16px; height: 16px; }
 }
