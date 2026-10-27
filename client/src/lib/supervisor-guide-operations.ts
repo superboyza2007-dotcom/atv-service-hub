@@ -1,3 +1,5 @@
+import { normalizeSessionExpiryBehavior, type TimerExpiryBehavior } from "@shared/supervisor-timer-settings";
+
 export type SupervisorGuideStatus = "Standby" | "Active" | "TIME_EXPIRED" | "Completed";
 export type SupervisorGuideSession = {
   sessionId: string;
@@ -15,6 +17,8 @@ export type SupervisorGuideSession = {
   completedById?: string;
   completedByName?: string;
   overtimeAcknowledged?: boolean;
+  timerEnabled?: boolean;
+  expiryBehavior?: TimerExpiryBehavior;
 };
 
 export type SupervisorGuideMember = { id: string; name: string };
@@ -65,6 +69,8 @@ export function normalizeSupervisorGuideSessions(value: unknown): SupervisorGuid
       completedById: typeof item.completedById === "string" ? item.completedById : undefined,
       completedByName: typeof item.completedByName === "string" ? item.completedByName : undefined,
       overtimeAcknowledged: item.overtimeAcknowledged === true,
+      timerEnabled: typeof item.timerEnabled === "boolean" ? item.timerEnabled : undefined,
+      expiryBehavior: normalizeSessionExpiryBehavior(item.expiryBehavior),
     }];
   });
 }

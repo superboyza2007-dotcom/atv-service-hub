@@ -10,12 +10,12 @@ import {
 describe("supervisor guide operations", () => {
   it("normalizes valid Guide sessions and ignores malformed records", () => {
     const sessions = normalizeSupervisorGuideSessions([
-      { sessionId: "S-001", status: "Active", durationMinutes: 60, vehicleIds: ["m3-v1"], memberIds: ["1"], riderCount: 2, passengerCount: 1, createdAt: "2026-08-26T01:00:00.000Z", startedAt: "2026-08-26T01:05:00.000Z", overtimeAcknowledged: true },
+      { sessionId: "S-001", status: "Active", durationMinutes: 60, vehicleIds: ["m3-v1"], memberIds: ["1"], riderCount: 2, passengerCount: 1, createdAt: "2026-08-26T01:00:00.000Z", startedAt: "2026-08-26T01:05:00.000Z", overtimeAcknowledged: true, timerEnabled: true, expiryBehavior: "auto_complete" },
       { sessionId: "bad", status: "Unknown", durationMinutes: 30 },
       { sessionId: "bad-duration", status: "Standby", durationMinutes: 45 },
     ]);
     expect(sessions).toHaveLength(1);
-    expect(sessions[0]).toMatchObject({ sessionId: "S-001", status: "Active", durationMinutes: 60, vehicleIds: ["m3-v1"], overtimeAcknowledged: true });
+    expect(sessions[0]).toMatchObject({ sessionId: "S-001", status: "Active", durationMinutes: 60, vehicleIds: ["m3-v1"], overtimeAcknowledged: true, timerEnabled: true, expiryBehavior: "auto_complete" });
   });
 
   it("opens the selected Active session from the Supervisor dashboard feed", () => {

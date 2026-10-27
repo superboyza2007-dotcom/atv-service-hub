@@ -14109,3 +14109,51 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
   .mechanic-waiting-parts-toggle input { width: 12px !important; height: 12px !important; }
   .mechanic-waiting-parts-badge { min-width: 42px; padding: 2px 3px; font-size: 8px; }
 }
+
+/* Final override: the mechanic module has exactly three bottom-nav tabs. */
+.mechanic-bottom-nav { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+.mechanic-bottom-nav > button { grid-column: auto !important; width: 100%; }
+
+/* Shared Thai speech accessibility settings */
+.speech-settings-card { display: grid; gap: 14px; margin: 14px 0; padding: 16px; border: 1px solid rgba(125, 222, 158, .28); border-radius: 12px; background: linear-gradient(135deg, rgba(17, 65, 48, .7), rgba(9, 35, 34, .78)); color: #effff3; }
+.speech-settings-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.speech-settings-heading p { margin: 0 0 4px; color: #8df0ad; font: 700 10px/1.2 "IBM Plex Mono", monospace; letter-spacing: .08em; }
+.speech-settings-heading h3 { margin: 0; font-size: 18px; }
+.speech-settings-heading span { display: block; margin-top: 5px; color: rgba(239, 255, 243, .68); font-size: 12px; line-height: 1.5; }
+.speech-settings-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px; border: 1px solid rgba(141, 240, 173, .2); border-radius: 9px; background: rgba(0, 0, 0, .14); cursor: pointer; }
+.speech-settings-toggle span { display: grid; gap: 4px; }
+.speech-settings-toggle strong { font-size: 14px; }
+.speech-settings-toggle small { color: rgba(239, 255, 243, .68); font-size: 11px; line-height: 1.45; }
+.speech-settings-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.speech-settings-toggle i { position: relative; flex: 0 0 auto; width: 46px; height: 26px; border-radius: 999px; background: rgba(255,255,255,.2); transition: .18s ease; }
+.speech-settings-toggle i::after { content: ""; position: absolute; top: 4px; left: 4px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: .18s ease; }
+.speech-settings-toggle:has(input:checked) i { background: #3fd978; }
+.speech-settings-toggle:has(input:checked) i::after { transform: translateX(20px); background: #082317; }
+.speech-settings-toggle:focus-within { outline: 2px solid #8df0ad; outline-offset: 2px; }
+.speech-settings-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.speech-settings-actions span { color: rgba(239, 255, 243, .58); font-size: 11px; }
+.speech-settings-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.supervisor-settings-stack { display: grid; gap: 16px; }
+.supervisor-timer-settings-options fieldset { display: grid; gap: 10px; margin: 0; padding: 0; border: 0; }
+.supervisor-timer-settings-options fieldset:disabled { opacity: .48; }
+.supervisor-timer-settings-options legend { margin: 0 0 8px; color: #effff3; font-size: 13px; font-weight: 700; }
+.supervisor-timer-expiry-legend { margin-top: 10px !important; }
+.supervisor-timer-choice-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.supervisor-timer-choice-row button { display: flex; align-items: baseline; justify-content: center; gap: 7px; min-height: 48px; border: 1px solid rgba(141, 240, 173, .22); border-radius: 9px; background: rgba(0, 0, 0, .14); color: #effff3; cursor: pointer; }
+.supervisor-timer-choice-row button.selected { border-color: #8df0ad; background: rgba(63, 217, 120, .16); box-shadow: inset 0 0 0 1px rgba(141, 240, 173, .2); }
+.supervisor-timer-choice-row button strong { font-size: 18px; }
+.supervisor-timer-choice-row button span { color: rgba(239, 255, 243, .68); font-size: 12px; }
+.supervisor-timer-policy-options { display: grid; gap: 8px; }
+.supervisor-timer-policy-options label { display: flex; align-items: flex-start; gap: 10px; padding: 11px; border: 1px solid rgba(141, 240, 173, .18); border-radius: 9px; background: rgba(0, 0, 0, .12); cursor: pointer; }
+.supervisor-timer-policy-options label.selected { border-color: #8df0ad; background: rgba(63, 217, 120, .12); }
+.supervisor-timer-policy-options input { margin-top: 3px; accent-color: #3fd978; }
+.supervisor-timer-policy-options span { display: grid; gap: 4px; }
+.supervisor-timer-policy-options strong { font-size: 13px; }
+.supervisor-timer-policy-options small, .supervisor-timer-settings-note, .supervisor-timer-settings-error { color: rgba(239, 255, 243, .68); font-size: 11px; line-height: 1.5; }
+.supervisor-timer-settings-error { color: #ffb8a6; }
+.supervisor-timer-settings .speech-settings-actions span { display: inline-flex; align-items: center; gap: 5px; }
+.supervisor-standby-creator .m3-guide-21-vehicle-tile { position: relative; }
+.supervisor-standby-creator .m3-guide-21-selected-check { position: absolute; top: 4px; right: 4px; z-index: 2; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #a6ffb5; color: #082317; box-shadow: 0 1px 5px rgba(0, 0, 0, .55); pointer-events: none; }
+@media (max-width: 520px) {
+  .supervisor-standby-creator .m3-guide-21-selected-check { top: 2px; right: 2px; width: 16px; height: 16px; }
+}

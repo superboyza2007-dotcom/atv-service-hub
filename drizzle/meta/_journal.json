@@ -36,6 +36,13 @@
       "when": 1792140000000,
       "tag": "0004_dice_mini_integration",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1793113200000,
+      "tag": "0005_supervisor_timer_settings",
+      "breakpoints": true
     }
   ]
 }

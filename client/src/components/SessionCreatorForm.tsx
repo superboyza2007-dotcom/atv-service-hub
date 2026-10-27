@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, CalendarClock, Check, ChevronDown, Plus, Search } from "lucide-react";
 import { isVehicleOperationallyReadyStatus } from "@/lib/vehicle-selection-rules";
 import { groupVehicleOptionsByResponsibility, prioritizeVehicleGroupsByQueue } from "@/lib/vehicle-selection-groups";
@@ -39,9 +39,10 @@ type Props = {
   onSafetyNoticeOpen?: (notices: VehicleSafetyNotice[]) => void;
   responsibilityGroups?: ResponsibilityGroupRecord[];
   queueManagerIds?: string[];
+  defaultDurationMinutes?: 30 | 60;
 };
 
-export function SessionCreatorForm({ vehicles, members, busyVehicleNumbers, busyMemberIds = new Set<string>(), creatorName, onBack, onCreate, roleLabel = "Guide / Mechanic", activeUserId: initialActiveUserId = "", activeUserName = creatorName, lockActiveUser = false, safetyNotices = [], onSafetyNoticeOpen, responsibilityGroups = [], queueManagerIds = [] }: Props) {
+export function SessionCreatorForm({ vehicles, members, busyVehicleNumbers, busyMemberIds = new Set<string>(), creatorName, onBack, onCreate, roleLabel = "Guide / Mechanic", activeUserId: initialActiveUserId = "", activeUserName = creatorName, lockActiveUser = false, safetyNotices = [], onSafetyNoticeOpen, responsibilityGroups = [], queueManagerIds = [], defaultDurationMinutes = 30 }: Props) {
   const [vehicleNumbers, setVehicleNumbers] = useState<number[]>([]);
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [vehicleSelectionMode, setVehicleSelectionMode] = useState<"grouped" | "number">("grouped");
@@ -51,7 +52,8 @@ export function SessionCreatorForm({ vehicles, members, busyVehicleNumbers, busy
   const [memberSearch, setMemberSearch] = useState("");
   const [error, setError] = useState("");
   const [pendingDraft, setPendingDraft] = useState<Omit<SessionCreatorDraft, "durationMinutes"> | null>(null);
-  const [selectedDuration, setSelectedDuration] = useState<30 | 60>(30);
+  const [selectedDuration, setSelectedDuration] = useState<30 | 60>(defaultDurationMinutes);
+  useEffect(() => setSelectedDuration(defaultDurationMinutes), [defaultDurationMinutes]);
   const inputVehicleGroups = useMemo(() => prioritizeVehicleGroupsByQueue(
     groupVehicleOptionsByResponsibility(vehicles.filter(vehicle => isVehicleOperationallyReadyStatus(vehicle.status)), responsibilityGroups),
     responsibilityGroups,
@@ -68,7 +70,8 @@ export function SessionCreatorForm({ vehicles, members, busyVehicleNumbers, busy
     const locked = busyVehicleNumbers.has(vehicle.number);
     const selected = vehicleNumbers.includes(vehicle.number);
     const accent = vehicle.color || "#4ee88a";
-    return <button type="button" key={vehicle.number} disabled={!ready || locked} style={{ borderColor: selected ? "#87919b" : accent, color: accent }} className={`m3-guide-21-vehicle-tile ${vehicle.status} ${selected ? "selected m3-selected-vehicle" : ""} ${locked ? "locked" : ""}`} onClick={() => toggleVehicle(vehicle.number)}>
+    return <button type="button" key={vehicle.number} disabled={!ready || locked} aria-pressed={selected} aria-label={`เบอร์รถ ${vehicle.number}${selected ? " เลือกแล้ว" : ""}`} style={{ borderColor: selected ? "#87919b" : accent, color: accent }} className={`m3-guide-21-vehicle-tile ${vehicle.status} ${selected ? "selected m3-selected-vehicle" : ""} ${locked ? "locked" : ""}`} onClick={() => toggleVehicle(vehicle.number)}>
+      {selected && <span className="m3-guide-21-selected-check" aria-hidden="true"><Check size={12} strokeWidth={3} /></span>}
       <span className="m3-lot-number-wrap"><b>#{vehicle.number}</b>{grouped && <VehicleSafetyNoticeIndicator notices={safetyNotices} vehicleNumber={vehicle.number} accentColor={accent} onOpen={onSafetyNoticeOpen ?? (() => undefined)} inline />}</span>
       <small>{locked ? "อยู่ใน Standby หรือ Active" : vehicle.status === "inspection" ? "พร้อมใช้ · มีคำแนะนำ" : ready ? "พร้อม" : "ไม่พร้อม"}</small>
       {grouped && <><em>{vehicle.group || "ยังไม่มีกลุ่ม"}</em><em>{vehicle.manager || "ยังไม่ระบุผู้ดูแล"}</em></>}

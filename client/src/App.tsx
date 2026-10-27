@@ -5,6 +5,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { SpeechSettingsProvider } from "./contexts/SpeechSettingsContext";
 import GuideModule3 from "./pages/GuideModule3";
 import MechanicModule from "./pages/MechanicModule";
 import SupervisorModule from "./pages/SupervisorModule";
@@ -26,14 +27,16 @@ export default function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
-        <Toaster />
-        {isMechanicDemo || isFullAppDemo ? <PttRoomProvider>{isFullAppDemo && !isMechanicModule && !isSupervisorModule && module !== "guide" ? <FullAppDemoModule /> : isMechanicModule ? <MechanicModule /> : isSupervisorModule ? <SupervisorModule /> : <GuideModule3 />}</PttRoomProvider> : <AppAccessGate requestedModule={requestedModule}>
-          <PttRoomProvider>
-            <FutureDiceResultToast />
-            <FutureDiceGame />
-            {isMechanicModule ? <MechanicModule /> : isSupervisorModule ? <SupervisorModule /> : <GuideModule3 />}
-          </PttRoomProvider>
-        </AppAccessGate>}
+        <SpeechSettingsProvider>
+          <Toaster />
+          {isMechanicDemo || isFullAppDemo ? <PttRoomProvider>{isFullAppDemo && !isMechanicModule && !isSupervisorModule && module !== "guide" ? <FullAppDemoModule /> : isMechanicModule ? <MechanicModule /> : isSupervisorModule ? <SupervisorModule /> : <GuideModule3 />}</PttRoomProvider> : <AppAccessGate requestedModule={requestedModule}>
+            <PttRoomProvider>
+              <FutureDiceResultToast />
+              <FutureDiceGame />
+              {isMechanicModule ? <MechanicModule /> : isSupervisorModule ? <SupervisorModule /> : <GuideModule3 />}
+            </PttRoomProvider>
+          </AppAccessGate>}
+        </SpeechSettingsProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

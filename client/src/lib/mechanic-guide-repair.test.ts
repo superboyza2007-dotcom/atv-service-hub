@@ -44,6 +44,12 @@ describe("mechanic guide repair reports", () => {
     expect(markGuideRepairReportInProgress([report], report.id)[0].completedAt).toBeUndefined();
   });
 
+  it("treats a usable waiting-parts report as ready instead of repair", () => {
+    const report = { id: "repair-2", vehicleId: "m3-v2", description: "รออะไหล่แต่ยังใช้งานได้", reporter: "บอย", createdAt: "2026-08-26T06:00:00.000Z", status: "รออะไหล่ใช้งานได้" };
+    expect(isGuideRepairReportPending(report, [])).toBe(false);
+    expect(pendingGuideRepairVehicleNumbers([report], [])).not.toContain(2);
+  });
+
   it("does not reopen a completed guide report from a stale open snapshot", () => {
     const completed = { id: "repair-17", vehicleId: "m3-v17", description: "ตรวจเบรก", reporter: "บอย", createdAt: "2026-08-26T06:00:00.000Z", status: "ซ่อมเสร็จ", completedAt: "2026-08-26T06:05:00.000Z", completedBy: "ช่างเอ" };
     const staleOpen = { ...completed, status: "กำลังซ่อม", completedAt: undefined, completedBy: undefined };

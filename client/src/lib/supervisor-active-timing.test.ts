@@ -14,4 +14,14 @@ describe("supervisor active timing", () => {
     expect(result.remainingSeconds).toBe(0);
     expect(result.overtimeSeconds).toBe(372);
   });
+
+  it("แสดงว่าปิดการจับเวลาเมื่อ session ถูกเริ่มโดยปิด timer", () => {
+    const result = supervisorActiveTimeLabel("2026-08-25T09:00:00.000Z", 30, Date.parse("2026-08-25T09:36:12.000Z"), undefined, false);
+    expect(result.label).toBe("ปิดตัวจับเวลา");
+  });
+
+  it("แสดงสถานะรอระบบจบเมื่อ policy เป็น auto-complete", () => {
+    const result = supervisorActiveTimeLabel("2026-08-25T09:00:00.000Z", 30, Date.parse("2026-08-25T09:36:12.000Z"), undefined, true, "auto_complete");
+    expect(result.label).toBe("ครบเวลา · ระบบกำลังจบรายการ");
+  });
 });
