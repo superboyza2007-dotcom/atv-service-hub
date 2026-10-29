@@ -11,6 +11,7 @@ import { serveStatic, setupVite } from "./vite";
 import { registerPttSignaling } from "../ptt-signaling";
 import { cleanupLiveMessagesHandler } from "../scheduledCleanup";
 import { reconcileVehicleSessionsHandler } from "../scheduledVehicleReconcile";
+import { ensureVehicleFlowReconciliationSchedule } from "../vehicleFlowSchedule";
 import { publicPlatformScript } from "./publicConfig";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -30,6 +31,18 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
     }
   }
   throw new Error(`No available port found starting from ${startPort}`);
+}
+
+function provisionVehicleFlowReconciliationSchedule(attempt = 1) {
+  void ensureVehicleFlowReconciliationSchedule()
+    .then(({ taskUid, created }) => console.log(`[vehicle-session-reconcile] ${created ? "created" : "verified"} heartbeat task ${taskUid}`))
+    .catch(error => {
+      console.error(`[vehicle-session-reconcile] heartbeat provisioning attempt ${attempt} failed`, error);
+      if (attempt < 5) {
+        const delayMs = Math.min(60_000, 5_000 * 2 ** (attempt - 1));
+        setTimeout(() => provisionVehicleFlowReconciliationSchedule(attempt + 1), delayMs);
+      }
+    });
 }
 
 async function startServer() {
@@ -73,6 +86,7 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    if (process.env.NODE_ENV === "production") provisionVehicleFlowReconciliationSchedule();
   });
 }
 
