@@ -17,7 +17,7 @@ import { buildDailyActiveTimeline, DAILY_TIME_SLOTS, groupDailyActiveTimelineByS
 import { extractGuideVehicleNumber, GUIDE_REPAIR_SCREEN, mergeGuideRepairReports, type GuideRepairReport } from "@/lib/mechanic-guide-repair";
 import { canReceiveVehiclePickup, markVehiclePickupRequestReceived, pickupRequestsForResponsibleOwner, receiveVehiclePickupForGuide, type VehiclePickupRequest } from "@/lib/vehicle-pickup-notifications";
 import { acknowledgeVehicleMaintenanceNotification, notificationsForGuide, type VehicleMaintenanceNotification } from "@/lib/vehicle-maintenance-notifications";
-import { type VehicleSafetyNotice } from "@/lib/vehicle-safety-notices";
+import { removeOrphanedVehicleSafetyNotices, type VehicleSafetyNotice } from "@/lib/vehicle-safety-notices";
 import { buildSupervisorInputVehicles, buildSupervisorUserDirectoryStatusModel, buildSupervisorUserDirectoryStatusSource } from "@/lib/supervisor-data";
 import { groupVehicleOptionsByResponsibility, prioritizeVehicleGroupsByQueue } from "@/lib/vehicle-selection-groups";
 import { formatSessionCountdown, remainingSessionSeconds, sessionTiming } from "@/lib/session-countdown";
@@ -334,6 +334,7 @@ export default function GuideModule3() {
   const saveGuideSessionsMutation = trpc.operationsSnapshots.merge.useMutation();
   const saveGuideStateMutation = trpc.operationsSnapshots.merge.useMutation();
   const saveSupervisorFleetSnapshotMutation = trpc.operationsSnapshots.merge.useMutation();
+  const saveVehicleFlowSnapshotMutation = trpc.operationsSnapshots.merge.useMutation();
   const appendGuideMessageMutation = trpc.operationsSnapshots.append.useMutation();
   const payoutVerifyMutation = trpc.directory.verifyCurrentCode.useMutation();
   const sessionMessageMigrationAttempted = useRef(false);
@@ -451,6 +452,16 @@ export default function GuideModule3() {
       setSafetyNotices(current => JSON.stringify(current) === JSON.stringify(remote.safetyNotices) ? current : remote.safetyNotices!);
     }
   }, [vehicleFlowSnapshotQuery.data, vehicleFlowSnapshotQuery.isSuccess]);
+  useEffect(() => {
+    if (!vehicleFlowSnapshotQuery.isSuccess || !guideSessionsQuery.isSuccess) return;
+    const flow = parseOperationsSnapshot<VehicleFlowSnapshot>(vehicleFlowSnapshotQuery.data);
+    const guide = parseOperationsSnapshot<{ repairReports?: unknown[] }>(guideSessionsQuery.data);
+    if (!Array.isArray(flow?.safetyNotices) || !Array.isArray(guide?.repairReports)) return;
+    const cleaned = removeOrphanedVehicleSafetyNotices(flow.safetyNotices, guide.repairReports.filter((report): report is { id: string; status?: string; completedAt?: string } => Boolean(report && typeof report === "object" && typeof (report as { id?: unknown }).id === "string")));
+    if (JSON.stringify(cleaned) === JSON.stringify(flow.safetyNotices)) return;
+    setSafetyNotices(cleaned);
+    saveVehicleFlowSnapshotMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.vehicleFlow, payload: serializeOperationsSnapshot({ safetyNotices: cleaned }) });
+  }, [guideSessionsQuery.data, guideSessionsQuery.isSuccess, vehicleFlowSnapshotQuery.data, vehicleFlowSnapshotQuery.isSuccess]);
   const vehicleSummaryQuery = trpc.vehicleFlow.summary.useQuery(undefined, { enabled: isAuthenticated, retry: false });
   const pickupNotificationsQuery = trpc.vehicleFlow.pickupNotifications.useQuery(undefined, { enabled: isAuthenticated, retry: false });
   const usingPersistentVehicleFlow = Boolean(vehicleSummaryQuery.data?.length);
@@ -549,7 +560,7 @@ export default function GuideModule3() {
     vehicleState: responsibilityState,
     guideReports: repairReports.filter(report => !safetyNotices.some(notice => notice.waitingParts && (notice.id === report.id || notice.sourceRepairReportId === report.id))),
     mechanicRepairs: parseOperationsSnapshot<{ repairs?: unknown }>(mechanicStateQuery.data)?.repairs,
-    guidanceVehicleNumbers: safetyNotices.filter(notice => !notice.waitingParts).map(notice => notice.vehicleNumber),
+    guidanceVehicleNumbers: safetyNotices.map(notice => notice.vehicleNumber),
     pickupVehicleNumbers: pickupRequests.filter(request => request.status === "รอรับรถ").map(request => request.vehicleNumber),
     activeVehicleNumbers: activeSessions.flatMap(session => session.vehicleIds.map(id => Number(String(id).replace(/^m3-v/, "")))),
   })), [activeSessions, mechanicStateQuery.data, pickupRequests, responsibilityState, repairReports, safetyNotices, vehicles]);

@@ -39,6 +39,18 @@ export function removeVehicleSafetyNotice(notices: VehicleSafetyNotice[], notice
   return notices.filter(notice => notice.id !== noticeId);
 }
 
+export type VehicleSafetyNoticeRepairReport = { id: string; status?: string; completedAt?: string };
+
+/** Waiting-parts notices are valid only while their originating repair report is open. */
+export function removeOrphanedVehicleSafetyNotices(notices: VehicleSafetyNotice[], reports: VehicleSafetyNoticeRepairReport[]): VehicleSafetyNotice[] {
+  const reportsById = new Map(reports.map(report => [report.id, report]));
+  return notices.filter(notice => {
+    if (!notice.sourceRepairReportId) return true;
+    const report = reportsById.get(notice.sourceRepairReportId);
+    return Boolean(report) && report?.status !== "ซ่อมเสร็จ" && !report?.completedAt;
+  });
+}
+
 export function noticesForVehicle(notices: VehicleSafetyNotice[], vehicleNumber: number): VehicleSafetyNotice[] {
   return notices.filter(notice => notice.vehicleNumber === vehicleNumber).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }

@@ -11,7 +11,7 @@ import { formatVehicleManagerNames, resolveVehicleManagerNames, resolveVehicleRe
 import { findMechanicRoundTableUser } from "@/lib/mechanic-round-table";
 import { buildPersonalPayoutRows, normalizePayoutValue, PAYOUT_ROUND_COLUMNS, payoutPageOffsetForDate, updatePersonalPayoutValue, type PersonalPayoutValues, type PayoutSessionLike } from "@/lib/mechanic-payout-table";
 import { buildSupervisorUserDirectoryStatusModel, buildSupervisorUserDirectoryStatusSource } from "@/lib/supervisor-data";
-import { removeVehicleSafetyNotice, upsertVehicleSafetyNotice, type VehicleSafetyNotice } from "@/lib/vehicle-safety-notices";
+import { removeOrphanedVehicleSafetyNotices, removeVehicleSafetyNotice, upsertVehicleSafetyNotice, type VehicleSafetyNotice } from "@/lib/vehicle-safety-notices";
 import { addMaintenanceRule, defaultRoundChangeSettings, evaluateMaintenanceAlerts, getMaintenanceMeterLevel, normalizeRoundChangeSettings, removeMaintenanceRule, updateMaintenanceRule, type MaintenanceRule, type RoundChangeSettings, type VehicleCc } from "@/lib/mechanic-round-change";
 import { hasVehicleMaintenanceNotification, type VehicleMaintenanceNotification } from "@/lib/vehicle-maintenance-notifications";
 import { accumulatedHoursForVehicle, summarizeVehicleUsageHours, type VehicleUsageHours } from "@/lib/vehicle-usage-hours";
@@ -323,6 +323,16 @@ export default function MechanicModule() {
     if (Array.isArray(remote?.safetyNotices)) setSafetyNotices(remote.safetyNotices);
   }, [vehicleFlowSnapshotQuery.data]);
   useEffect(() => {
+    if (!vehicleFlowSnapshotQuery.isSuccess || !guideSessionsQuery.isSuccess) return;
+    const flow = parseOperationsSnapshot<VehicleFlowSnapshot>(vehicleFlowSnapshotQuery.data);
+    const guide = parseOperationsSnapshot<{ repairReports?: unknown[] }>(guideSessionsQuery.data);
+    if (!Array.isArray(flow?.safetyNotices) || !Array.isArray(guide?.repairReports)) return;
+    const cleaned = removeOrphanedVehicleSafetyNotices(flow.safetyNotices, guide.repairReports.filter((report): report is { id: string; status?: string; completedAt?: string } => Boolean(report && typeof report === "object" && typeof (report as { id?: unknown }).id === "string")));
+    if (JSON.stringify(cleaned) === JSON.stringify(flow.safetyNotices)) return;
+    setSafetyNotices(cleaned);
+    saveVehicleFlowSnapshotMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.vehicleFlow, payload: serializeOperationsSnapshot({ safetyNotices: cleaned }) });
+  }, [guideSessionsQuery.data, guideSessionsQuery.isSuccess, vehicleFlowSnapshotQuery.data, vehicleFlowSnapshotQuery.isSuccess]);
+  useEffect(() => {
     if (!mechanicStateHydrated.current) return;
     saveMechanicStateMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.mechanicState, payload: serializeOperationsSnapshot({ ...localState, repairPartOptions, roundChangeSettings, maintenanceResetHours, personalPayoutValues }) });
   }, [localState, repairPartOptions, roundChangeSettings, maintenanceResetHours, personalPayoutValues]);
@@ -347,7 +357,7 @@ export default function MechanicModule() {
     vehicleState,
     guideReports: guideRepairReports.filter(report => !safetyNotices.some(notice => notice.waitingParts && (notice.id === report.id || notice.sourceRepairReportId === report.id))),
     mechanicRepairs: localState.repairs,
-    guidanceVehicleNumbers: safetyNotices.filter(notice => !notice.waitingParts).map(notice => notice.vehicleNumber),
+    guidanceVehicleNumbers: safetyNotices.map(notice => notice.vehicleNumber),
     pickupVehicleNumbers: pickupRequests.filter(request => request.status === "รอรับรถ").map(request => request.vehicleNumber),
     activeVehicleNumbers: guideSessionsFromServer.filter(session => session.status === "Active").flatMap(session => (session.vehicleIds ?? []).map(id => Number(String(id).replace(/^m3-v/, "")))),
   })), [vehicleState, guideRepairReports, localState.repairs, pickupRequests, safetyNotices, guideSessionsFromServer]);
