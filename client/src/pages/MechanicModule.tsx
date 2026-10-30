@@ -671,6 +671,16 @@ export default function MechanicModule() {
     const completedWaitingNoticeIds = completedWaitingAlertId
       ? new Set([completedWaitingAlertId, ...safetyNotices.filter(notice => notice.sourceRepairReportId === completedWaitingAlertId).map(notice => notice.id)])
       : undefined;
+    const nextSafetyNotices = completedWaitingAlertId
+      ? safetyNotices.filter(notice => !completedWaitingNoticeIds?.has(notice.id) && notice.sourceRepairReportId !== completedWaitingAlertId)
+      : safetyNotices;
+    const nextGuideRepairReports = persistGuideRepairLifecycle(nextRepair, status, now, mechanicName, guideRepairReports) ?? guideRepairReports;
+    const nextStages = completedWaitingAlertId ? { ...repairBoardStages } : repairBoardStages;
+    const nextDetails = completedWaitingAlertId ? { ...repairBoardOutcomeDetails } : repairBoardOutcomeDetails;
+    if (completedWaitingAlertId) {
+      delete nextStages[completedWaitingAlertId];
+      delete nextDetails[completedWaitingAlertId];
+    }
     const nextLocalState: MechanicLocalState = {
       ...localState,
       alerts: completedWaitingNoticeIds ? localState.alerts.filter(alert => !completedWaitingNoticeIds.has(alert.id)) : localState.alerts,
@@ -680,19 +690,10 @@ export default function MechanicModule() {
     };
     setLocalState(nextLocalState);
     if (completedWaitingAlertId) {
-      const nextSafetyNotices = safetyNotices.filter(notice => !completedWaitingNoticeIds?.has(notice.id) && notice.sourceRepairReportId !== completedWaitingAlertId);
       setSafetyNotices(nextSafetyNotices);
-      saveVehicleFlowSnapshotMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.vehicleFlow, payload: serializeOperationsSnapshot({ safetyNotices: nextSafetyNotices }) });
-      const nextStages = { ...repairBoardStages };
-      const nextDetails = { ...repairBoardOutcomeDetails };
-      delete nextStages[completedWaitingAlertId];
-      delete nextDetails[completedWaitingAlertId];
-      persistRepairBoardStages(nextStages, nextDetails);
+      setRepairBoardStages(nextStages);
+      setRepairBoardOutcomeDetails(nextDetails);
       setRepairBoardRepairCompletionId(undefined);
-      const latestWaitingVehicleState = parseOperationsSnapshot<{ vehicleState?: VehicleResponsibilityState }>(supervisorFleetSnapshotQuery.data)?.vehicleState ?? vehicleState;
-      const readyVehicleState = { version: latestWaitingVehicleState.version, updatedAt: Date.now(), ...applyMechanicVehicleStatus(latestWaitingVehicleState, [vehicleNumber], "ready") };
-      setVehicleState(readyVehicleState);
-      saveSupervisorFleetSnapshotMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.fleet, payload: serializeOperationsSnapshot({ vehicleState: readyVehicleState }) });
     }
     const repairPartsText = parts.toLocaleLowerCase();
     const resetRuleIds = roundChangeSettings.rules
@@ -735,17 +736,15 @@ export default function MechanicModule() {
       ? aggregateVehiclePickupRequests(storedPickupRequests, [nextRequest], sharedGroups, directoryUsers)
       : removeVehiclePickupRequest(storedPickupRequests, repairId);
     setPickupRequests(nextPickupRequests);
-    const pickupPayload = serializeOperationsSnapshot({ pickupRequests: nextPickupRequests });
+    const pickupPayload = serializeOperationsSnapshot({ safetyNotices: nextSafetyNotices, pickupRequests: nextPickupRequests });
     saveVehicleFlowSnapshotMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.vehicleFlow, payload: pickupPayload });
     // Persist the status transition and pickup queue together so an older snapshot
     // write cannot overwrite the ready state after a no-pickup completion.
     saveSupervisorFleetSnapshotMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.fleet, payload: serializeOperationsSnapshot({ vehicleState: nextVehicleState, pickupRequests: nextPickupRequests }) });
-    const repairActor = currentMechanicActor;
-    const nextGuideRepairReports = persistGuideRepairLifecycle(nextRepair, status, now, repairActor.name, guideRepairReports);
-    if (nextGuideRepairReports) setGuideRepairReports(nextGuideRepairReports);
+    setGuideRepairReports(nextGuideRepairReports);
     // Repair lifecycle updates only the repairReports field. It must not rewrite
     // Guide sessions or cause the Guide screen to follow a Standby session.
-    const repairReportsPayload = serializeOperationsSnapshot({ repairReports: nextGuideRepairReports ?? guideRepairReports });
+    const repairReportsPayload = serializeOperationsSnapshot({ repairReports: nextGuideRepairReports, ...(completedWaitingAlertId ? { repairBoardStages: nextStages, repairBoardOutcomeDetails: nextDetails } : {}) });
     saveGuideSessionsMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.guideSessions, payload: repairReportsPayload });
     saveGuideStateMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.guideState, payload: repairReportsPayload });
     resetRepairForm();
