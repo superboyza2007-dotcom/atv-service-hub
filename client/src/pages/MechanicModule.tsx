@@ -394,7 +394,8 @@ export default function MechanicModule() {
       id: "waiting-available",
       title: "รออะไหล่ใช้งานได้",
       tone: "available",
-      cards: [...guideRepairRows.filter(report => repairBoardStages[report.id] === "รออะไหล่ใช้งานได้").map(report => ({ id: report.id, vehicleNumber: report.vehicleNumber, title: `รถ #${report.vehicleNumber}`, detail: repairBoardOutcomeDetails[report.id] || report.description, meta: `${report.reporter} · ${formatThaiDate(report.createdAt)}`, kind: "report" as const, report })), ...localState.repairs.filter(repair => repair.status === "แจ้งรับรถ").map(repair => ({ id: repair.id, vehicleNumber: repair.vehicleNumber, title: `รถ #${repair.vehicleNumber}`, detail: repair.parts.trim() || repair.symptom, meta: `${repair.technician} · ${formatThaiDate(repair.updatedAt)}`, kind: "repair" as const, repair }))],
+      // รายการซ่อมที่กดตรงและเลือก “แจ้งรับรถ” เป็นงานซ่อมปกติ ไม่ใช่รายการรออะไหล่
+      cards: guideRepairRows.filter(report => repairBoardStages[report.id] === "รออะไหล่ใช้งานได้").map(report => ({ id: report.id, vehicleNumber: report.vehicleNumber, title: `รถ #${report.vehicleNumber}`, detail: repairBoardOutcomeDetails[report.id] || report.description, meta: `${report.reporter} · ${formatThaiDate(report.createdAt)}`, kind: "report" as const, report })),
     },
   ];
   const alertRecords: AlertRecord[] = safetyNotices.filter(notice => notice.source !== "waiting-available").map(notice => ({ ...notice }));
