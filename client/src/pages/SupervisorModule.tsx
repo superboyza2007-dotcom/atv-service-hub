@@ -616,7 +616,7 @@ export default function SupervisorModule() {
     ? supervisorActiveTimeLabel(selectedGuideSession.startedAt, selectedGuideSession.durationMinutes, now, selectedGuideSession.scheduledEndAt, selectedGuideSession.timerEnabled !== false, selectedGuideSession.expiryBehavior)
     : undefined;
   useEffect(() => {
-    if (selectedGuideSession?.status !== "Active" || selectedGuideSession.timerEnabled === false || selectedGuideSession.expiryBehavior || !selectedGuideSession.startedAt || selectedGuideSession.overtimeAcknowledged || !selectedSupervisorTiming || selectedSupervisorTiming.overtimeSeconds <= 0) return;
+    if (selectedGuideSession?.status !== "Active" || selectedGuideSession.timerEnabled === false || selectedGuideSession.expiryBehavior === "auto_complete" || !selectedGuideSession.startedAt || selectedGuideSession.overtimeAcknowledged || !selectedSupervisorTiming || selectedSupervisorTiming.overtimeSeconds <= 0) return;
     setSupervisorCompletionPrompt(current => isActiveCompletionPromptFor(current, selectedGuideSession.sessionId) ? current : createActiveCompletionPrompt(selectedGuideSession.sessionId, "expired"));
   }, [selectedGuideSession?.sessionId, selectedGuideSession?.status, selectedGuideSession?.startedAt, selectedGuideSession?.overtimeAcknowledged, selectedSupervisorTiming?.overtimeSeconds]);
   const openGuideSession = (session: SupervisorGuideSession) => { setSelectedGuideSessionId(session.sessionId); setSupervisorCompletionPrompt(null); setSupervisorDetailAction(null); setNotice(""); setTab("dashboard"); };
