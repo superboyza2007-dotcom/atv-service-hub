@@ -23,7 +23,7 @@ export const REPAIR_LOG_SHEET_COLUMNS = [
 const repairLogCellSchema = z.union([z.string().max(20_000), z.number().finite()]);
 const repairLogColumnsSchema = z.array(z.string()).length(REPAIR_LOG_SHEET_COLUMNS.length).refine(
   columns => columns.every((column, index) => column === REPAIR_LOG_SHEET_COLUMNS[index]),
-  "RepairLog columns must match the configured 14-column contract",
+  "RepairLog columns must match the configured 13-column contract",
 );
 const repairLogRowSchema = z.array(repairLogCellSchema).length(REPAIR_LOG_SHEET_COLUMNS.length);
 
