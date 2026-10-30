@@ -9495,6 +9495,12 @@ button:active {
 .mechanic-setting-note, .mechanic-settings-card p { margin: 0; color: rgba(224, 246, 230, .66); font-size: 12px; line-height: 1.55; }
 .mechanic-settings-card { display: grid; gap: 10px; }
 .mechanic-settings-card h4 { margin: 0; color: #f2fff6; font-size: 16px; }
+.mechanic-settings-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.mechanic-sheet-settings-form { display: grid; gap: 8px; padding: 12px; border: 1px solid rgba(125, 222, 158, .2); border-radius: 9px; background: rgba(1, 17, 20, .42); }
+.mechanic-sheet-settings-form label { display: grid; gap: 6px; color: #e6ffec; font-size: 13px; font-weight: 700; }
+.mechanic-sheet-settings-form input { min-width: 0; padding: 11px 12px; border: 1px solid rgba(153, 224, 175, .32); border-radius: 8px; color: #effff4; background: rgba(1, 17, 20, .8); outline: none; }
+.mechanic-sheet-settings-form input:focus { border-color: #79f3a4; box-shadow: 0 0 0 2px rgba(121, 243, 164, .12); }
+.mechanic-sheet-settings-form small { color: rgba(224, 246, 230, .66); font-size: 12px; line-height: 1.5; }
 @media (max-width: 560px) {
   .mechanic-guide-dashboard { padding-bottom: 102px; }
   .mechanic-bottom-nav { width: calc(100vw - 8px); min-height: 70px; border-radius: 13px 13px 0 0; }

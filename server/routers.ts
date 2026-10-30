@@ -23,7 +23,7 @@ import {
 } from "./vehicleFlowService";
 import { completeNextActiveQueue, reconcileActiveQueue } from "./activeQueueMirror";
 import { getActiveQueueBridgeSnapshot } from "./activeSourceBridge";
-import { isRepairLogSheetConfigured, repairLogPayloadSchema, submitRepairLogSheetPayload } from "./repairLogGoogleSheets";
+import { getRepairLogScriptUrl, isRepairLogSheetConfigured, parseAllowedAppsScriptUrl, REPAIR_LOG_SETTINGS_SNAPSHOT_KEY, repairLogPayloadSchema, submitRepairLogSheetPayload } from "./repairLogGoogleSheets";
 import { cancelFutureDiceSession, chooseFutureDiceOutcome, createFutureDiceSession, getFutureDiceInvitationForUser, getFutureDiceSession, isFutureDiceRuleError, listFutureDiceSessions, rollFutureDice, setFutureDiceOutcomeType, type FutureDiceActor } from "./futureDiceService";
 import { createRepairWorkflowItem, completeRepairWorkflowItem, listRepairWorkflowItems, transitionRepairWorkflowItem, REPAIR_WORKFLOW_STATUSES } from "./repairWorkflowService";
 import { normalizeSupervisorTimerSettings, SUPERVISOR_TIMER_SETTINGS_SNAPSHOT_KEY } from "../shared/supervisor-timer-settings";
@@ -134,17 +134,30 @@ export const appRouter = router({
     }),
   }),
   repairLog: router({
-    status: appProtectedProcedure.query(() => ({ configured: isRepairLogSheetConfigured() })),
+    status: appProtectedProcedure.query(async () => {
+      const scriptUrl = await getRepairLogScriptUrl();
+      return { configured: isRepairLogSheetConfigured(scriptUrl), scriptUrl };
+    }),
+    updateSettings: appProtectedProcedure.input(z.object({ scriptUrl: z.string().trim().max(2_000) })).mutation(async ({ ctx, input }) => {
+      const group = ctx.appUser?.userGroup ?? "";
+      const canConfigure = ctx.appSpecialAccess || ctx.user?.role === "admin" || ctx.user?.role === "supervisor" || group.includes("ช่าง") || group.includes("หัวหน้า");
+      if (!canConfigure) throw new TRPCError({ code: "FORBIDDEN", message: "Mechanic or supervisor permission required" });
+      const scriptUrl = input.scriptUrl.trim();
+      if (!parseAllowedAppsScriptUrl(scriptUrl)) throw new TRPCError({ code: "BAD_REQUEST", message: "กรุณาใช้ URL Google Apps Script Web App ที่ลงท้ายด้วย /exec" });
+      await upsertAppOperationsSnapshot(REPAIR_LOG_SETTINGS_SNAPSHOT_KEY, JSON.stringify({ scriptUrl }));
+      return { configured: true as const, scriptUrl };
+    }),
     submit: appProtectedProcedure.input(repairLogPayloadSchema).mutation(async ({ ctx, input }) => {
       const group = ctx.appUser?.userGroup ?? "";
       if (!ctx.appSpecialAccess && ctx.user?.role !== "admin" && !group.includes("ช่าง") && !group.includes("หัวหน้า")) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Mechanic or supervisor permission required" });
       }
-      if (!isRepairLogSheetConfigured()) {
+      const scriptUrl = await getRepairLogScriptUrl();
+      if (!isRepairLogSheetConfigured(scriptUrl)) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Google Sheets repair-log integration is not configured" });
       }
       try {
-        await submitRepairLogSheetPayload(input);
+        await submitRepairLogSheetPayload(input, scriptUrl);
         return { ok: true as const, sentAt: new Date().toISOString() };
       } catch (error) {
         console.error("[RepairLog] Server-side Google Sheets submission failed");

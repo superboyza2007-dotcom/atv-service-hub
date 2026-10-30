@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { ENV } from "./_core/env";
+import { getAppOperationsSnapshot } from "./db";
+
+export const REPAIR_LOG_SETTINGS_SNAPSHOT_KEY = "atv-repair-log-settings-v1";
 
 export const REPAIR_LOG_SHEET_COLUMNS = [
   "รหัสรายการ",
@@ -20,7 +23,7 @@ export const REPAIR_LOG_SHEET_COLUMNS = [
 const repairLogCellSchema = z.union([z.string().max(20_000), z.number().finite()]);
 const repairLogColumnsSchema = z.array(z.string()).length(REPAIR_LOG_SHEET_COLUMNS.length).refine(
   columns => columns.every((column, index) => column === REPAIR_LOG_SHEET_COLUMNS[index]),
-  "RepairLog columns must match the configured 13-column contract",
+  "RepairLog columns must match the configured 14-column contract",
 );
 const repairLogRowSchema = z.array(repairLogCellSchema).length(REPAIR_LOG_SHEET_COLUMNS.length);
 
@@ -58,6 +61,19 @@ export function isRepairLogSheetConfigured(rawValue = ENV.repairLogScriptUrl): b
   return parseAllowedAppsScriptUrl(rawValue) !== null;
 }
 
+export async function getRepairLogScriptUrl(): Promise<string> {
+  const payload = await getAppOperationsSnapshot(REPAIR_LOG_SETTINGS_SNAPSHOT_KEY);
+  if (payload) {
+    try {
+      const value = JSON.parse(payload) as { scriptUrl?: unknown };
+      if (typeof value.scriptUrl === "string" && isRepairLogSheetConfigured(value.scriptUrl)) return value.scriptUrl.trim();
+    } catch {
+      // Fall back to the environment setting when the saved setting is invalid.
+    }
+  }
+  return isRepairLogSheetConfigured(ENV.repairLogScriptUrl) ? ENV.repairLogScriptUrl.trim() : "";
+}
+
 function parseAllowedGoogleRedirect(location: string, baseUrl: URL): URL | null {
   try {
     const url = new URL(location, baseUrl);
@@ -80,7 +96,7 @@ function parseAllowedGoogleRedirect(location: string, baseUrl: URL): URL | null 
 
 export async function submitRepairLogSheetPayload(
   payload: RepairLogPayload,
-  rawUrl = ENV.repairLogScriptUrl,
+  rawUrl: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ ok: true }> {
   const endpoint = parseAllowedAppsScriptUrl(rawUrl);
