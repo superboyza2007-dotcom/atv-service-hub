@@ -23,9 +23,10 @@ import {
 } from "./vehicleFlowService";
 import { completeNextActiveQueue, reconcileActiveQueue } from "./activeQueueMirror";
 import { getActiveQueueBridgeSnapshot } from "./activeSourceBridge";
-import { getRepairLogScriptUrl, isRepairLogSheetConfigured, parseAllowedAppsScriptUrl, REPAIR_LOG_SETTINGS_SNAPSHOT_KEY, repairLogPayloadSchema, submitRepairLogSheetPayload } from "./repairLogGoogleSheets";
+import { buildRepairLogSheetPayload, getRepairLogScriptUrl, isRepairLogSheetConfigured, parseAllowedAppsScriptUrl, REPAIR_LOG_SETTINGS_SNAPSHOT_KEY, submitRepairLogSheetPayload } from "./repairLogGoogleSheets";
 import { cancelFutureDiceSession, chooseFutureDiceOutcome, createFutureDiceSession, getFutureDiceInvitationForUser, getFutureDiceSession, isFutureDiceRuleError, listFutureDiceSessions, rollFutureDice, setFutureDiceOutcomeType, type FutureDiceActor } from "./futureDiceService";
 import { createRepairWorkflowItem, completeRepairWorkflowItem, listRepairWorkflowItems, transitionRepairWorkflowItem, REPAIR_WORKFLOW_STATUSES } from "./repairWorkflowService";
+import { archiveMechanicRepairRecord, createMechanicRepairRecord, listMechanicRepairRecords, listPendingMechanicRepairRecords, markMechanicRepairRecordsExported, updateMechanicRepairRecord } from "./mechanicRepairService";
 import { normalizeSupervisorTimerSettings, SUPERVISOR_TIMER_SETTINGS_SNAPSHOT_KEY } from "../shared/supervisor-timer-settings";
 
 const vehicleActor = (user: { id: number; role: "user" | "guide" | "mechanic" | "supervisor" | "admin" }) => ({
@@ -147,22 +148,26 @@ export const appRouter = router({
       await upsertAppOperationsSnapshot(REPAIR_LOG_SETTINGS_SNAPSHOT_KEY, JSON.stringify({ scriptUrl }));
       return { configured: true as const, scriptUrl };
     }),
-    submit: appProtectedProcedure.input(repairLogPayloadSchema).mutation(async ({ ctx, input }) => {
+    export: appProtectedProcedure.mutation(async ({ ctx }) => {
       const group = ctx.appUser?.userGroup ?? "";
-      if (!ctx.appSpecialAccess && ctx.user?.role !== "admin" && !group.includes("ช่าง") && !group.includes("หัวหน้า")) {
+      if (!ctx.appSpecialAccess && ctx.user?.role !== "admin" && ctx.user?.role !== "mechanic" && ctx.user?.role !== "supervisor" && !group.includes("ช่าง") && !group.includes("หัวหน้า")) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Mechanic or supervisor permission required" });
       }
+      const pending = await listPendingMechanicRepairRecords();
+      if (!pending.length) return { count: 0, sentAt: new Date().toISOString() };
       const scriptUrl = await getRepairLogScriptUrl();
       if (!isRepairLogSheetConfigured(scriptUrl)) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Google Sheets repair-log integration is not configured" });
       }
       try {
-        await submitRepairLogSheetPayload(input, scriptUrl);
-        return { ok: true as const, sentAt: new Date().toISOString() };
-      } catch (error) {
+        await submitRepairLogSheetPayload(buildRepairLogSheetPayload(pending), scriptUrl);
+      } catch {
         console.error("[RepairLog] Server-side Google Sheets submission failed");
         throw new TRPCError({ code: "BAD_GATEWAY", message: "Google Sheets could not confirm the repair-log export" });
       }
+      const sentAt = new Date();
+      await markMechanicRepairRecordsExported(pending.map(record => record.id), sentAt);
+      return { count: pending.length, sentAt: sentAt.toISOString() };
     }),
   }),
   futureDice: router({
@@ -298,7 +303,8 @@ export const appRouter = router({
   operationsSnapshots: router({
     get: appProtectedProcedure.input(z.object({ key: z.string().trim().min(1).max(64) })).query(async ({ input }) => (await getAppOperationsSnapshot(input.key)) ?? null),
     save: appProtectedProcedure.input(z.object({ key: z.string().trim().min(1).max(64), payload: z.string().max(2_000_000) })).mutation(async ({ input }) => {
-      await upsertAppOperationsSnapshot(input.key, input.payload);
+      if (input.key === "atv-mechanic-state-v1") await mergeAppOperationsSnapshot(input.key, input.payload);
+      else await upsertAppOperationsSnapshot(input.key, input.payload);
       return { success: true } as const;
     }),
     merge: appProtectedProcedure.input(z.object({ key: z.string().trim().min(1).max(64), payload: z.string().max(2_000_000) })).mutation(async ({ input }) => {
@@ -306,8 +312,45 @@ export const appRouter = router({
       return { success: true, payload } as const;
     }),
     append: appProtectedProcedure.input(z.object({ key: z.string().trim().min(1).max(64), field: z.string().trim().min(1).max(64), item: z.string().max(32_000), maxItems: z.number().int().min(1).max(500).optional() })).mutation(async ({ input }) => {
+      if (input.key === "atv-mechanic-state-v1" && input.field === "repairs") throw new TRPCError({ code: "BAD_REQUEST", message: "Mechanic repair records must be changed through mechanicRepairs endpoints" });
       const payload = await appendAppOperationsSnapshotItem(input.key, input.field, input.item, input.maxItems);
       return { success: true, payload } as const;
+    }),
+  }),
+  mechanicRepairs: router({
+    list: appProtectedProcedure.query(() => listMechanicRepairRecords()),
+    create: appProtectedProcedure.input(z.object({
+      vehicleNumber: z.number().int().positive(),
+      symptom: z.string().trim().min(1).max(20_000),
+      parts: z.string().max(20_000).default(""),
+      decision: z.enum(["แจ้งรับรถ", "ไม่แจ้งรับรถ"]).optional(),
+      sourceGuideRepairId: z.string().trim().max(128).optional(),
+      accumulatedHoursAtRepair: z.number().finite().nonnegative().optional(),
+    })).mutation(({ ctx, input }) => {
+      const group = ctx.appUser?.userGroup ?? "";
+      const allowed = ctx.appSpecialAccess || ctx.user?.role === "admin" || ctx.user?.role === "mechanic" || ctx.user?.role === "supervisor" || group.includes("ช่าง") || group.includes("หัวหน้า");
+      if (!allowed) throw new TRPCError({ code: "FORBIDDEN", message: "Mechanic or supervisor permission required" });
+      return createMechanicRepairRecord({ ...input, parts: input.parts.trim(), technician: ctx.appUser?.name ?? ctx.user?.name ?? "ช่าง" });
+    }),
+    update: appProtectedProcedure.input(z.object({
+      id: z.string().trim().min(3).max(128),
+      vehicleNumber: z.number().int().positive(),
+      symptom: z.string().trim().min(1).max(20_000),
+      parts: z.string().max(20_000).default(""),
+      decision: z.enum(["แจ้งรับรถ", "ไม่แจ้งรับรถ"]).optional(),
+      sourceGuideRepairId: z.string().trim().max(128).optional(),
+      accumulatedHoursAtRepair: z.number().finite().nonnegative().optional(),
+    })).mutation(({ ctx, input }) => {
+      const group = ctx.appUser?.userGroup ?? "";
+      const allowed = ctx.appSpecialAccess || ctx.user?.role === "admin" || ctx.user?.role === "mechanic" || ctx.user?.role === "supervisor" || group.includes("ช่าง") || group.includes("หัวหน้า");
+      if (!allowed) throw new TRPCError({ code: "FORBIDDEN", message: "Mechanic or supervisor permission required" });
+      return updateMechanicRepairRecord(input.id, { ...input, parts: input.parts.trim(), technician: ctx.appUser?.name ?? ctx.user?.name ?? "ช่าง" });
+    }),
+    archive: appProtectedProcedure.input(z.object({ id: z.string().trim().min(3).max(128) })).mutation(({ ctx, input }) => {
+      const group = ctx.appUser?.userGroup ?? "";
+      const allowed = ctx.appSpecialAccess || ctx.user?.role === "admin" || ctx.user?.role === "mechanic" || ctx.user?.role === "supervisor" || group.includes("ช่าง") || group.includes("หัวหน้า");
+      if (!allowed) throw new TRPCError({ code: "FORBIDDEN", message: "Mechanic or supervisor permission required" });
+      return archiveMechanicRepairRecord(input.id);
     }),
   }),
   repairWorkflow: router({

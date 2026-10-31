@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildRepairLogSheetPayload,
   isRepairLogSheetConfigured,
   parseAllowedAppsScriptUrl,
   repairLogPayloadSchema,
@@ -32,6 +33,29 @@ const payload: RepairLogPayload = {
 };
 
 describe("server-side Google Apps Script repair-log proxy", () => {
+  it("builds the Sheets payload directly from canonical repair records", () => {
+    const generated = buildRepairLogSheetPayload([{
+      id: "RP-db-1",
+      vehicleNumber: 12,
+      symptom: "ตรวจเบรก",
+      parts: "ผ้าเบรก",
+      technician: "ช่างเอ",
+      decision: "แจ้งรับรถ",
+      status: "แจ้งรับรถ",
+      createdAt: "2026-09-28T00:00:00.000Z",
+      updatedAt: "2026-09-28T02:00:00.000Z",
+      sourceGuideRepairId: "guide-1",
+      accumulatedHoursAtRepair: 1.5,
+    }], new Date("2026-09-28T03:00:00.000Z"));
+
+    expect(generated.columns).toEqual(columns);
+    expect(generated.rows).toEqual([[
+      "RP-db-1", "2026-09-28T00:00:00.000Z", "2026-09-28T02:00:00.000Z", "2.0 ชม.", 12,
+      "ตรวจเบรก", "ผ้าเบรก", "ช่างเอ", 1.5, "แจ้งรับรถ", "แจ้งรับรถ", "guide-1", "รายการซ่อม",
+    ]]);
+    expect(generated.sentAt).toBe("2026-09-28T03:00:00.000Z");
+  });
+
   it("requires the exact RepairLog 13-column contract", () => {
     expect(repairLogPayloadSchema.safeParse(payload).success).toBe(true);
     expect(repairLogPayloadSchema.safeParse({ ...payload, columns: ["รายการ"] }).success).toBe(false);
