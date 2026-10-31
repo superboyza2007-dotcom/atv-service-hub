@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ArrowRight, LockKeyhole, LogOut, ShieldCheck, UserRound } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import { canOpenModule, identityFromServerSession, moduleForUserGroup, type AppIdentity, type AppModule } from "@/lib/app-access";
+import { canOpenModule, identityFromServerSession, moduleForUserGroup, type AppAccessTarget, type AppIdentity, type AppModule } from "@/lib/app-access";
 
-type AppAccessGateProps = { requestedModule: AppModule | null; children: ReactNode };
+type AppAccessGateProps = { requestedModule: AppAccessTarget | null; children: ReactNode };
 
 function LoginView({ onAuthenticated }: { onAuthenticated: () => Promise<void> }) {
   const [code, setCode] = useState("");

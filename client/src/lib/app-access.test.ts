@@ -13,8 +13,15 @@ describe("server-session app access", () => {
     const identity = identityFromServerSession({ id: 2, name: "Mechanic One", group: "ทีมช่าง", special: false });
     expect(identity).toEqual({ memberId: 2, name: "Mechanic One", group: "ทีมช่าง", module: "mechanic", special: false });
     expect(canOpenModule(identity!, "mechanic")).toBe(true);
+    expect(canOpenModule(identity!, "mechanicTips")).toBe(false);
     expect(canOpenModule(identity!, "guide")).toBe(false);
     expect(identityFromServerSession(null)).toBeNull();
+  });
+
+  it("allows guides to open only the mechanic warning workspace", () => {
+    const identity = identityFromServerSession({ id: 7, name: "Guide One", group: "ทีมไกด์", special: false });
+    expect(canOpenModule(identity!, "mechanicTips")).toBe(true);
+    expect(canOpenModule(identity!, "mechanic")).toBe(false);
   });
 
   it("grants special module choice only for a server-confirmed special session", () => {

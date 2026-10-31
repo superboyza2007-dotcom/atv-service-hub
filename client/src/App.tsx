@@ -14,7 +14,7 @@ import FutureDiceResultToast from "./components/FutureDiceResultToast";
 import FutureDiceGame from "./components/FutureDiceGame";
 import { PttRoomProvider } from "./components/PttRoom";
 import AppAccessGate from "./components/AppAccessGate";
-import type { AppModule } from "@/lib/app-access";
+import type { AppAccessTarget } from "@/lib/app-access";
 
 export default function App() {
   const params = new URLSearchParams(window.location.search);
@@ -23,7 +23,8 @@ export default function App() {
   const isFullAppDemo = params.get("demo") === "full-app";
   const isMechanicModule = module === "mechanic";
   const isSupervisorModule = module === "supervisor";
-  const requestedModule: AppModule | null = isMechanicModule ? "mechanic" : isSupervisorModule ? "supervisor" : module === "guide" ? "guide" : null;
+  const isMechanicTipsAccess = isMechanicModule && params.get("tab") === "tips";
+  const requestedModule: AppAccessTarget | null = isMechanicTipsAccess ? "mechanicTips" : isMechanicModule ? "mechanic" : isSupervisorModule ? "supervisor" : module === "guide" ? "guide" : null;
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
@@ -33,7 +34,7 @@ export default function App() {
             <PttRoomProvider>
               <FutureDiceResultToast />
               <FutureDiceGame />
-              {isMechanicModule ? <MechanicModule /> : isSupervisorModule ? <SupervisorModule /> : <GuideModule3 />}
+              {isMechanicModule ? <MechanicModule guideTipsOnly={isMechanicTipsAccess} /> : isSupervisorModule ? <SupervisorModule /> : <GuideModule3 />}
             </PttRoomProvider>
           </AppAccessGate>}
         </SpeechSettingsProvider>
