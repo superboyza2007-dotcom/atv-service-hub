@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ArrowLeft, Check, Clock3, ClipboardList, ClipboardPlus, Lightbulb, ListChecks, MessageCircle, Pencil, Plus, RefreshCw, RotateCcw, Save, Settings2, Table2, Trash2, Wrench } from "lucide-react";
 import { resolveMechanicRecordVehicleStatus } from "@/lib/mechanic-record-status";
-import { filterActiveMechanicRepairs, getMechanicRepairLog } from "@/lib/mechanic-repair-visibility";
+import { getMechanicRepairLog } from "@/lib/mechanic-repair-visibility";
 import { canSubmitMechanicRepair, normalizeOptionalRepairParts } from "@/lib/mechanic-repair-form";
 import { closeGuideRepairReport, extractGuideVehicleNumber, findGuideRepairReportForRepair, guideRepairVehicleSelection, isGuideRepairReportCompleted, isGuideRepairReportPending, markGuideRepairReportInProgress, mergeGuideRepairReports, type GuideRepairReport } from "@/lib/mechanic-guide-repair";
 import { applyMechanicVehicleStatus, getMechanicVehicleStatus } from "@/lib/mechanic-vehicle-flow";
@@ -38,7 +38,6 @@ import { mergeVehiclePickupRequests, type VehicleFlowSnapshot } from "@/lib/vehi
 import { mergeSessionChatMessages } from "@/lib/session-chat-sync";
 import { mergeSharedSessions, patchSharedSession } from "@/lib/shared-session-sync";
 import { useCanonicalAppDirectory } from "@/hooks/useCanonicalAppDirectory";
-import { buildRepairLogSheetPayload } from "@/lib/repair-log-google-sheets";
 import { showBrowserNotification } from "@/lib/browser-notification";
 import { FULL_APP_DEMO_REPAIR_REPORTS, isFullAppDemo } from "@/lib/full-app-demo";
 import SpeechSettingsPanel from "@/components/SpeechSettingsPanel";
@@ -89,8 +88,8 @@ type AlertSeverity = "ปกติ" | "เร่งด่วน";
 type RepairStatus = "กำลังซ่อม" | "แจ้งรับรถ" | "เสร็จแล้ว";
 type RepairDecision = "แจ้งรับรถ" | "ไม่แจ้งรับรถ";
 type AlertRecord = { id: string; source?: "manual" | "waiting-available"; sourceRepairReportId?: string; vehicleNumber: number; description: string; severity: AlertSeverity; reporter: string; createdAt: string; waitingParts?: boolean; waitingPartDetail?: string };
-type RepairRecord = { id: string; vehicleNumber: number; symptom: string; parts: string; technician: string; decision?: RepairDecision; status: RepairStatus; createdAt: string; updatedAt: string; sourceGuideRepairId?: string; accumulatedHoursAtRepair?: number };
-type MechanicLocalState = { alerts: AlertRecord[]; repairs: RepairRecord[] };
+type RepairRecord = { id: string; vehicleNumber: number; symptom: string; parts: string; technician: string; decision?: RepairDecision; status: RepairStatus; createdAt: string; updatedAt: string; sourceGuideRepairId?: string; accumulatedHoursAtRepair?: number; exportedAt?: string };
+type MechanicLocalState = { alerts: AlertRecord[] };
 type MechanicServerState = MechanicLocalState & { repairPartOptions?: string[]; roundChangeSettings?: RoundChangeSettings; maintenanceResetHours?: Record<string, number>; personalPayoutValues?: PersonalPayoutValues };
 type PendingMaintenanceReset = { ruleId: string; vehicleNumber: number };
 const defaultRepairPartOptions = ["น้ำมันเครื่อง", "ผ้าเบรก", "ยาง", "แบตเตอรี่", "โซ่และสเตอร์"];
@@ -129,7 +128,7 @@ export default function MechanicModule() {
   const [tab, setTab] = useState<MechanicTab>(() => readInitialMechanicTab());
   const [vehicleState, setVehicleState] = useState<VehicleResponsibilityState>(EMPTY_VEHICLE_STATE);
   const [mechanicLoginKey, setMechanicLoginKey] = useState("");
-  const [localState, setLocalState] = useState<MechanicLocalState>({ alerts: [], repairs: [] });
+  const [localState, setLocalState] = useState<MechanicLocalState>({ alerts: [] });
   const [safetyNotices, setSafetyNotices] = useState<VehicleSafetyNotice[]>([]);
   const [selectedSafetyNotices, setSelectedSafetyNotices] = useState<VehicleSafetyNotice[]>([]);
   const [guideRepairReports, setGuideRepairReports] = useState<GuideRepairReport[]>(() => isMechanicDemo ? [{ id: "demo-guide-repair-28", vehicleId: "m3-v28", description: "ตรวจพบเบรกมีเสียงดัง กรุณาตรวจสอบก่อนนำรถไปใช้งาน", reporter: "Gun (Guide)", createdAt: "2026-10-26T15:00:00.000Z", status: "แจ้งซ่อม" }] : fullAppDemo ? [...FULL_APP_DEMO_REPAIR_REPORTS] : []);
@@ -238,6 +237,15 @@ export default function MechanicModule() {
   const supervisorFleetSnapshotQuery = trpc.operationsSnapshots.get.useQuery({ key: OPERATIONS_SNAPSHOT_KEYS.fleet }, { retry: false, refetchInterval: 3000 });
   const vehicleFlowSummaryQuery = trpc.vehicleFlow.summary.useQuery(undefined, { retry: false, refetchInterval: 3000 });
   const repairWorkflowQuery = trpc.repairWorkflow.list.useQuery(undefined, { enabled: !isMechanicDemo && !fullAppDemo, retry: false, refetchInterval: 3000 });
+  const mechanicRepairsQuery = trpc.mechanicRepairs.list.useQuery(undefined, { enabled: !isMechanicDemo && !fullAppDemo, retry: false, refetchInterval: 3000, refetchOnWindowFocus: true });
+  const utils = trpc.useUtils();
+  const repairRecords: RepairRecord[] = isMechanicDemo ? [] : (mechanicRepairsQuery.data ?? []).map(record => ({
+    ...record,
+    decision: record.decision ?? undefined,
+    sourceGuideRepairId: record.sourceGuideRepairId ?? undefined,
+    accumulatedHoursAtRepair: record.accumulatedHoursAtRepair ?? undefined,
+    exportedAt: record.exportedAt ?? undefined,
+  }));
   const directoryMeQuery = trpc.directory.me.useQuery(undefined, { retry: false, refetchOnWindowFocus: true });
   const saveGuideSessionsMutation = trpc.operationsSnapshots.merge.useMutation();
   const saveGuideStateMutation = trpc.operationsSnapshots.merge.useMutation();
@@ -249,7 +257,10 @@ export default function MechanicModule() {
     onSuccess: () => { void supervisorFleetSnapshotQuery.refetch(); },
   });
   const repairLogStatusQuery = trpc.repairLog.status.useQuery(undefined, { retry: false, refetchInterval: 60_000 });
-  const sendRepairLogMutation = trpc.repairLog.submit.useMutation();
+  const exportRepairLogMutation = trpc.repairLog.export.useMutation({ onSuccess: () => { void utils.mechanicRepairs.list.invalidate(); } });
+  const createMechanicRepairMutation = trpc.mechanicRepairs.create.useMutation({ onSuccess: () => { void utils.mechanicRepairs.list.invalidate(); } });
+  const updateMechanicRepairMutation = trpc.mechanicRepairs.update.useMutation({ onSuccess: () => { void utils.mechanicRepairs.list.invalidate(); } });
+  const archiveMechanicRepairMutation = trpc.mechanicRepairs.archive.useMutation({ onSuccess: () => { void utils.mechanicRepairs.list.invalidate(); } });
   const updateRepairLogSettingsMutation = trpc.repairLog.updateSettings.useMutation({
     onSuccess: result => {
       setRepairLogScriptUrl(result.scriptUrl);
@@ -269,15 +280,11 @@ export default function MechanicModule() {
   useEffect(() => {
     if (!mechanicStateQuery.isSuccess) return;
     const remote = parseOperationsSnapshot<Partial<MechanicServerState>>(mechanicStateQuery.data);
-    if (Array.isArray(remote?.alerts) || Array.isArray(remote?.repairs)) {
-      setLocalState(current => ({ alerts: Array.isArray(remote.alerts) ? remote.alerts as AlertRecord[] : current.alerts, repairs: Array.isArray(remote.repairs) ? remote.repairs as RepairRecord[] : current.repairs }));
-      if (Array.isArray(remote.repairPartOptions)) setRepairPartOptions(remote.repairPartOptions);
-      if (remote.roundChangeSettings) setRoundChangeSettings(normalizeRoundChangeSettings(remote.roundChangeSettings));
-      if (remote.maintenanceResetHours && typeof remote.maintenanceResetHours === "object") setMaintenanceResetHours(remote.maintenanceResetHours);
-      if (remote.personalPayoutValues && typeof remote.personalPayoutValues === "object") setPersonalPayoutValues(remote.personalPayoutValues);
-      mechanicStateHydrated.current = true;
-      return;
-    }
+    if (Array.isArray(remote?.alerts)) setLocalState(current => ({ ...current, alerts: remote.alerts as AlertRecord[] }));
+    if (Array.isArray(remote?.repairPartOptions)) setRepairPartOptions(remote.repairPartOptions);
+    if (remote?.roundChangeSettings) setRoundChangeSettings(normalizeRoundChangeSettings(remote.roundChangeSettings));
+    if (remote?.maintenanceResetHours && typeof remote.maintenanceResetHours === "object") setMaintenanceResetHours(remote.maintenanceResetHours);
+    if (remote?.personalPayoutValues && typeof remote.personalPayoutValues === "object") setPersonalPayoutValues(remote.personalPayoutValues);
     mechanicStateHydrated.current = true;
   }, [mechanicStateQuery.data, mechanicStateQuery.isSuccess]);
   useEffect(() => {
@@ -372,17 +379,17 @@ export default function MechanicModule() {
   const supervisorStatusModel = useMemo(() => buildSupervisorUserDirectoryStatusModel(buildSupervisorUserDirectoryStatusSource({
     vehicleState,
     guideReports: guideRepairReports.filter(report => !safetyNotices.some(notice => notice.waitingParts && (notice.id === report.id || notice.sourceRepairReportId === report.id))),
-    mechanicRepairs: localState.repairs,
+    mechanicRepairs: repairRecords,
     guidanceVehicleNumbers: safetyNotices.map(notice => notice.vehicleNumber),
     pickupVehicleNumbers: pickupRequests.filter(request => request.status === "รอรับรถ").map(request => request.vehicleNumber),
     activeVehicleNumbers: guideSessionsFromServer.filter(session => session.status === "Active").flatMap(session => (session.vehicleIds ?? []).map(id => Number(String(id).replace(/^m3-v/, "")))),
-  })), [vehicleState, guideRepairReports, localState.repairs, pickupRequests, safetyNotices, guideSessionsFromServer]);
+  })), [vehicleState, guideRepairReports, repairRecords, pickupRequests, safetyNotices, guideSessionsFromServer]);
   const vehicleResponsibilityMeta = (vehicleNumber: number) => resolveVehicleResponsibilityView(vehicleNumber, vehicleState.responsibilityGroups, directoryUsers);
   const managerName = (vehicleNumber: number) => formatVehicleManagerNames(vehicleNumber, vehicleState.responsibilityGroups, directoryUsers);
   const managerRecipients = (vehicleNumber: number, state: VehicleResponsibilityState = vehicleState) => recipientsForVehicleGroup(vehicleNumber, state.responsibilityGroups, directoryUsers);
-  const editingRepairVehicleNumber = editingRepairId ? localState.repairs.find(repair => repair.id === editingRepairId)?.vehicleNumber : undefined;
+  const editingRepairVehicleNumber = editingRepairId ? repairRecords.find(repair => repair.id === editingRepairId)?.vehicleNumber : undefined;
   const repairCandidates = vehicles.filter(vehicle => isSelectableForNewRepair(vehicle, new Set(), editingRepairVehicleNumber));
-  const guideRepairRows = guideRepairReports.filter(report => isGuideRepairReportPending(report, localState.repairs) || repairBoardStages[report.id] === "รออะไหล่ใช้งานได้" || repairBoardStages[report.id] === "รออะไหล่ห้ามใช้งาน").map(report => {
+  const guideRepairRows = guideRepairReports.filter(report => isGuideRepairReportPending(report, repairRecords) || repairBoardStages[report.id] === "รออะไหล่ใช้งานได้" || repairBoardStages[report.id] === "รออะไหล่ห้ามใช้งาน").map(report => {
     const vehicleNumber = extractGuideVehicleNumber(report.vehicleId) ?? 0;
     const vehicle = vehicles.find(item => item.number === vehicleNumber);
     return { ...report, vehicleNumber, cc: vehicle?.cc ?? "", manager: managerName(vehicleNumber) };
@@ -398,13 +405,13 @@ export default function MechanicModule() {
       id: "assessing",
       title: "กำลังประเมิน",
       tone: "assessing",
-      cards: [...guideRepairRows.filter(report => repairBoardStages[report.id] !== "รออะไหล่ใช้งานได้" && repairBoardStages[report.id] !== "รออะไหล่ห้ามใช้งาน").map(report => ({ id: report.id, vehicleNumber: report.vehicleNumber, title: `รถ #${report.vehicleNumber}`, detail: report.description, meta: `${report.reporter} · ${formatThaiDate(report.createdAt)}`, kind: "report" as const, report })), ...localState.repairs.filter(repair => repair.status === "กำลังซ่อม" && !repair.parts.trim()).map(repair => ({ id: repair.id, vehicleNumber: repair.vehicleNumber, title: `รถ #${repair.vehicleNumber}`, detail: repair.symptom, meta: `${repair.technician} · ${formatThaiDate(repair.updatedAt)}`, kind: "repair" as const, repair }))],
+      cards: [...guideRepairRows.filter(report => repairBoardStages[report.id] !== "รออะไหล่ใช้งานได้" && repairBoardStages[report.id] !== "รออะไหล่ห้ามใช้งาน").map(report => ({ id: report.id, vehicleNumber: report.vehicleNumber, title: `รถ #${report.vehicleNumber}`, detail: report.description, meta: `${report.reporter} · ${formatThaiDate(report.createdAt)}`, kind: "report" as const, report })), ...repairRecords.filter(repair => repair.status === "กำลังซ่อม" && !repair.parts.trim()).map(repair => ({ id: repair.id, vehicleNumber: repair.vehicleNumber, title: `รถ #${repair.vehicleNumber}`, detail: repair.symptom, meta: `${repair.technician} · ${formatThaiDate(repair.updatedAt)}`, kind: "repair" as const, repair }))],
     },
     {
       id: "waiting-unavailable",
       title: "รออะไหล่ห้ามใช้งาน",
       tone: "unavailable",
-      cards: [...guideRepairRows.filter(report => repairBoardStages[report.id] === "รออะไหล่ห้ามใช้งาน").map(report => ({ id: report.id, vehicleNumber: report.vehicleNumber, title: `รถ #${report.vehicleNumber}`, detail: repairBoardOutcomeDetails[report.id] || report.description, meta: `${report.reporter} · ${formatThaiDate(report.createdAt)}`, kind: "report" as const, report })), ...localState.repairs.filter(repair => repair.status === "กำลังซ่อม" && Boolean(repair.parts.trim())).map(repair => ({ id: repair.id, vehicleNumber: repair.vehicleNumber, title: `รถ #${repair.vehicleNumber}`, detail: repair.parts, meta: `${repair.technician} · ${formatThaiDate(repair.updatedAt)}`, kind: "repair" as const, repair }))],
+      cards: [...guideRepairRows.filter(report => repairBoardStages[report.id] === "รออะไหล่ห้ามใช้งาน").map(report => ({ id: report.id, vehicleNumber: report.vehicleNumber, title: `รถ #${report.vehicleNumber}`, detail: repairBoardOutcomeDetails[report.id] || report.description, meta: `${report.reporter} · ${formatThaiDate(report.createdAt)}`, kind: "report" as const, report })), ...repairRecords.filter(repair => repair.status === "กำลังซ่อม" && Boolean(repair.parts.trim())).map(repair => ({ id: repair.id, vehicleNumber: repair.vehicleNumber, title: `รถ #${repair.vehicleNumber}`, detail: repair.parts, meta: `${repair.technician} · ${formatThaiDate(repair.updatedAt)}`, kind: "repair" as const, repair }))],
     },
     {
       id: "waiting-available",
@@ -418,12 +425,8 @@ export default function MechanicModule() {
   const editingAlert = editingAlertId ? localState.alerts.find(alert => alert.id === editingAlertId) : undefined;
   const showWaitingPartsColumns = Boolean(repairBoardPendingAlertId) || alertRecords.some(alert => alert.source === "waiting-available") || editingAlert?.source === "waiting-available";
   const showWaitingPartsEntryColumns = Boolean(repairBoardPendingAlertId) || editingAlert?.source === "waiting-available";
-  const visibleRepairLogs = filterActiveMechanicRepairs(localState.repairs);
-  const repairLogRecords = getMechanicRepairLog(localState.repairs);
-  const sheetRows = [
-    ...localState.repairs.map(repair => ({ id: repair.id, kind: "repair" as const, vehicleNumber: repair.vehicleNumber, description: repair.symptom, reporter: repair.technician, createdAt: repair.updatedAt, status: repair.status, totalHours: formatElapsedHours(repair.createdAt, repair.updatedAt) })),
-    ...localState.alerts.filter(alert => !localState.repairs.some(repair => repair.vehicleNumber === alert.vehicleNumber)).map(alert => ({ id: alert.id, kind: "alert" as const, vehicleNumber: alert.vehicleNumber, description: alert.description, reporter: alert.reporter, createdAt: alert.createdAt, status: "เตือนระวัง", totalHours: formatElapsedHours(alert.createdAt) })),
-  ];
+  const repairLogRecords = getMechanicRepairLog(repairRecords);
+  const pendingRepairExportCount = repairLogRecords.filter(repair => !repair.exportedAt).length;
   const currentRoundTableUser = findMechanicRoundTableUser(directoryUsers, mechanicLoginKey);
   const currentMechanicActor = { id: directoryMeQuery.data?.id ? String(directoryMeQuery.data.id) : undefined, name: directoryMeQuery.data?.name ?? currentRoundTableUser?.name ?? "ช่าง" };
   const roundAnchorDate = new Date();
@@ -462,7 +465,7 @@ export default function MechanicModule() {
     const completionTiming = sessionCompletionTiming(selectedMechanicFollowSession.startedAt, completedAt, selectedMechanicFollowSession.durationMinutes ?? 30);
     const activity = createSessionActivity({ actorId: currentMechanicActor.id, actorName: currentMechanicActor.name, action: "จบงาน → Completed", detail: `${completionTimingDetail(completionTiming)} · ใช้เวลาจริง ${formatCompletionDifference(completionTiming.actualSeconds)}`, createdAt: completedAt });
     patchSelectedMechanicSession({ status: "Completed", completedAt, completedById: currentMechanicActor.id, completedByName: currentMechanicActor.name, completionTiming, overtimeAcknowledged: true, activityLog: appendSessionActivity(selectedMechanicFollowSession.activityLog, activity) });
-    syncTrackedVehicleStatuses(localState, selectedMechanicFollowSession.vehicleIds?.map(id => Number(id.replace(/^m3-v/, ""))).filter(Number.isFinite) ?? []);
+    syncTrackedVehicleStatuses(localState.alerts, repairRecords, selectedMechanicFollowSession.vehicleIds?.map(id => Number(id.replace(/^m3-v/, ""))).filter(Number.isFinite) ?? []);
     setMechanicCompletionPrompt(null);
     setSelectedMechanicFollowSessionId(undefined);
     setMechanicDetailAction(null);
@@ -556,10 +559,10 @@ export default function MechanicModule() {
   const moveRoundPage = (direction: -1 | 1) => setRoundPageOffset(index => index + direction);
   const isCurrentRoundDate = (date: Date) => date.getFullYear() === roundAnchorDate.getFullYear() && date.getMonth() === roundAnchorDate.getMonth() && date.getDate() === roundAnchorDate.getDate();
 
-  const syncTrackedVehicleStatuses = (nextLocalState: MechanicLocalState, numbers: number[]) => {
+  const syncTrackedVehicleStatuses = (alerts: AlertRecord[], repairs: RepairRecord[], numbers: number[]) => {
     const latestVehicleState = parseOperationsSnapshot<{ vehicleState?: VehicleResponsibilityState }>(supervisorFleetSnapshotQuery.data)?.vehicleState ?? vehicleState;
     const nextVehicleState = Array.from(new Set(numbers)).reduce((current, number) => {
-      const status = resolveMechanicRecordVehicleStatus(number, nextLocalState.alerts, nextLocalState.repairs);
+      const status = resolveMechanicRecordVehicleStatus(number, alerts, repairs);
       const patch = applyMechanicVehicleStatus(current, [number], status);
       return { version: current.version, updatedAt: Date.now(), ...patch };
     }, latestVehicleState);
@@ -638,7 +641,7 @@ export default function MechanicModule() {
     const vehicleNumber = Number(repairVehicle);
     const mechanicName = currentMechanicActor.name.trim();
     const parts = normalizeOptionalRepairParts(repairParts);
-    const existing = localState.repairs.find(repair => repair.id === editingRepairId);
+    const existing = repairRecords.find(repair => repair.id === editingRepairId);
     const vehicle = vehicles.find(candidate => candidate.number === vehicleNumber);
     if (!canSubmitMechanicRepair({ vehicleNumber: repairVehicle, decision: repairDecision }) || !mechanicName || !vehicle || !isSelectableForNewRepair(vehicle, new Set(), existing?.vehicleNumber)) return;
     const accumulatedHoursAtRepair = existing?.accumulatedHoursAtRepair ?? supervisorUsageHoursByVehicle.get(vehicleNumber);
@@ -658,22 +661,37 @@ export default function MechanicModule() {
         return;
       }
     }
-    const now = new Date().toISOString();
-    const status: RepairStatus = repairDecision === "แจ้งรับรถ" ? "แจ้งรับรถ" : "เสร็จแล้ว";
-    const repairId = existing?.id ?? `RP-${Date.now()}`;
-    const nextRepair: RepairRecord = {
-      id: repairId,
+    const repairInput = {
       vehicleNumber,
       symptom: repairSymptom.trim() || "ไม่ได้ระบุอาการ",
       parts,
-      technician: mechanicName,
-      decision: repairDecision || undefined,
-      status,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
+      decision: repairDecision as RepairDecision,
       sourceGuideRepairId: existing?.sourceGuideRepairId ?? selectedGuideRepairId,
       accumulatedHoursAtRepair,
     };
+    let nextRepair: RepairRecord;
+    if (isMechanicDemo) {
+      const now = new Date().toISOString();
+      nextRepair = { ...repairInput, id: existing?.id ?? `demo-RP-${Date.now()}`, technician: mechanicName, status: repairDecision === "แจ้งรับรถ" ? "แจ้งรับรถ" : "เสร็จแล้ว", createdAt: existing?.createdAt ?? now, updatedAt: now };
+    } else {
+      try {
+        const saved = existing
+          ? await updateMechanicRepairMutation.mutateAsync({ id: existing.id, ...repairInput })
+          : await createMechanicRepairMutation.mutateAsync(repairInput);
+        nextRepair = {
+          ...saved,
+          decision: saved.decision ?? undefined,
+          sourceGuideRepairId: saved.sourceGuideRepairId ?? undefined,
+          accumulatedHoursAtRepair: saved.accumulatedHoursAtRepair ?? undefined,
+        };
+      } catch (error) {
+        setRepairFormMessage(error instanceof Error ? error.message : "บันทึกรายการซ่อมผ่าน Backend ไม่สำเร็จ");
+        return;
+      }
+    }
+    const repairId = nextRepair.id;
+    const status = nextRepair.status;
+    const now = nextRepair.updatedAt;
     if (!isMechanicDemo) {
       const waitingWorkflowItem = repairBoardRepairCompletionId ? repairWorkflowQuery.data?.find(item => item.id === repairBoardRepairCompletionId || item.sourceRepairReportId === repairBoardRepairCompletionId) : undefined;
       const workflowRequest = waitingWorkflowItem
@@ -701,10 +719,10 @@ export default function MechanicModule() {
     const nextLocalState: MechanicLocalState = {
       ...localState,
       alerts: completedWaitingNoticeIds ? localState.alerts.filter(alert => !completedWaitingNoticeIds.has(alert.id)) : localState.alerts,
-      repairs: editingRepairId
-        ? localState.repairs.map(repair => repair.id === editingRepairId ? nextRepair : repair)
-        : [nextRepair, ...localState.repairs],
     };
+    const nextRepairRecords = editingRepairId
+      ? repairRecords.map(repair => repair.id === editingRepairId ? nextRepair : repair)
+      : [nextRepair, ...repairRecords];
     setLocalState(nextLocalState);
     if (completedWaitingAlertId) {
       setSafetyNotices(nextSafetyNotices);
@@ -724,7 +742,7 @@ export default function MechanicModule() {
     const trackedVehicleNumbers = [vehicleNumber, ...(existing ? [existing.vehicleNumber] : [])];
     const latestVehicleState = parseOperationsSnapshot<{ vehicleState?: VehicleResponsibilityState }>(supervisorFleetSnapshotQuery.data)?.vehicleState ?? vehicleState;
     const nextVehicleState = Array.from(new Set(trackedVehicleNumbers)).reduce((current, number) => {
-      const trackedStatus = resolveMechanicRecordVehicleStatus(number, nextLocalState.alerts, nextLocalState.repairs);
+      const trackedStatus = resolveMechanicRecordVehicleStatus(number, nextLocalState.alerts, nextRepairRecords);
       const patch = applyMechanicVehicleStatus(current, [number], trackedStatus);
       return { version: current.version, updatedAt: Date.now(), ...patch };
     }, latestVehicleState);
@@ -767,73 +785,32 @@ export default function MechanicModule() {
     resetRepairForm();
   };
   const editRepair = (repair: RepairRecord) => { setRepairVehicle(String(repair.vehicleNumber)); setRepairSymptom(repair.symptom); setSelectedGuideRepairId(repair.sourceGuideRepairId); setRepairParts(repair.parts); setRepairDecision(repair.decision ?? (repair.status === "แจ้งรับรถ" ? "แจ้งรับรถ" : "ไม่แจ้งรับรถ")); setEditingRepairId(repair.id); setTab("repair"); };
-  const deleteRepair = (repair: RepairRecord) => {
-    const nextLocalState = { ...localState, repairs: localState.repairs.filter(item => item.id !== repair.id) };
-    setLocalState(nextLocalState);
-    syncTrackedVehicleStatuses(nextLocalState, [repair.vehicleNumber]);
-    const sourceReport = findGuideRepairReportForRepair(guideRepairReports, repair);
-    const nextGuideRepairReports = sourceReport && sourceReport.status !== "ซ่อมเสร็จ"
-      ? closeGuideRepairReport(guideRepairReports, sourceReport.id, new Date().toISOString(), currentMechanicActor.name)
-      : guideRepairReports;
-    if (nextGuideRepairReports !== guideRepairReports) {
-      setGuideRepairReports(nextGuideRepairReports);
-      const repairReportsPayload = serializeOperationsSnapshot({ repairReports: nextGuideRepairReports });
-      saveGuideSessionsMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.guideSessions, payload: repairReportsPayload });
-      saveGuideStateMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.guideState, payload: repairReportsPayload });
+  const deleteRepair = async (repair: RepairRecord) => {
+    try {
+      await archiveMechanicRepairMutation.mutateAsync({ id: repair.id });
+      const nextRepairs = repairRecords.filter(item => item.id !== repair.id);
+      syncTrackedVehicleStatuses(localState.alerts, nextRepairs, [repair.vehicleNumber]);
+    } catch (error) {
+      setRepairLogSheetMessage(error instanceof Error ? error.message : "เก็บรายการซ่อมเข้าคลังผ่าน Backend ไม่สำเร็จ");
     }
-    const nextPickupRequests = removeVehiclePickupRequest(pickupRequests, repair.id);
-    setPickupRequests(nextPickupRequests);
-    const pickupPayload = serializeOperationsSnapshot({ pickupRequests: nextPickupRequests });
-    saveVehicleFlowSnapshotMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.vehicleFlow, payload: pickupPayload });
-    saveSupervisorFleetSnapshotMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.fleet, payload: pickupPayload });
   };
   const sendRepairLogToGoogleSheets = async () => {
-    if (!repairLogRecords.length) {
-      setRepairLogSheetMessage("ยังไม่มีรายการซ่อมให้ส่ง");
+    if (!pendingRepairExportCount) {
+      setRepairLogSheetMessage("ไม่มีรายการใหม่ที่รอส่งไป Google Sheets");
       return;
     }
     if (repairLogStatusQuery.data?.configured !== true) {
-      setRepairLogSheetMessage("ยังไม่ได้ตั้งค่า Google Apps Script ฝั่ง Server จึงยังไม่ส่งหรือลบรายการซ่อม");
+      setRepairLogSheetMessage("ยังไม่ได้ตั้งค่า Google Apps Script ฝั่ง Server จึงยังไม่ส่งรายการซ่อม");
       return;
     }
-    setRepairLogSheetMessage("กำลังส่งรายการทั้งหมดไป Google Sheets…");
-    const payload = buildRepairLogSheetPayload(repairLogRecords.map(repair => ({
-      id: repair.id,
-      kind: "repair" as const,
-      vehicleNumber: repair.vehicleNumber,
-      description: repair.symptom,
-      parts: repair.parts,
-      reporter: repair.technician,
-      createdAt: repair.createdAt,
-      updatedAt: repair.updatedAt,
-      status: repair.status,
-      decision: repair.decision,
-      sourceGuideRepairId: repair.sourceGuideRepairId,
-      accumulatedHoursAtRepair: repair.accumulatedHoursAtRepair,
-      totalHours: formatElapsedHours(repair.createdAt, repair.updatedAt),
-    })));
+    setRepairLogSheetMessage("กำลังส่งรายการจากฐานข้อมูล Backend ไป Google Sheets…");
     try {
-      const result = await sendRepairLogMutation.mutateAsync(payload);
-      const sentAt = result.sentAt;
-      const nextGuideRepairReports = repairLogRecords.reduce((reports, repair) => {
-        const sourceReport = findGuideRepairReportForRepair(reports, repair);
-        return sourceReport && sourceReport.status !== "ซ่อมเสร็จ"
-          ? closeGuideRepairReport(reports, sourceReport.id, sentAt, currentMechanicActor.name)
-          : reports;
-      }, guideRepairReports);
-      if (nextGuideRepairReports !== guideRepairReports) {
-        setGuideRepairReports(nextGuideRepairReports);
-        const repairReportsPayload = serializeOperationsSnapshot({ repairReports: nextGuideRepairReports });
-        saveGuideSessionsMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.guideSessions, payload: repairReportsPayload });
-        saveGuideStateMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.guideState, payload: repairReportsPayload });
-      }
-      const sentRepairIds = new Set(repairLogRecords.map(repair => repair.id));
-      const nextLocalState = { ...localState, repairs: localState.repairs.filter(repair => !sentRepairIds.has(repair.id)) };
-      setLocalState(nextLocalState);
-      syncTrackedVehicleStatuses(nextLocalState, Array.from(new Set(repairLogRecords.map(repair => repair.vehicleNumber))));
-      setRepairLogSheetMessage(`ส่ง ${repairLogRecords.length} รายการไป Google Sheets แล้ว และลบรายการออกจากหน้าบันทึกเรียบร้อย โดยคงคิวแจ้งรับรถและสถานะงานที่เกี่ยวข้องไว้`);
-    } catch {
-      setRepairLogSheetMessage("ส่งข้อมูลไม่สำเร็จ จึงยังไม่เคลียร์รายการซ่อม กรุณาตรวจการตั้งค่า Server และสิทธิ์ของ Google Apps Script");
+      const result = await exportRepairLogMutation.mutateAsync();
+      setRepairLogSheetMessage(result.count
+        ? `ส่ง ${result.count} รายการไป Google Sheets แล้ว และเก็บประวัติไว้ใน Backend`
+        : "ไม่มีรายการใหม่ที่รอส่งไป Google Sheets");
+    } catch (error) {
+      setRepairLogSheetMessage(error instanceof Error ? error.message : "ส่งข้อมูลไม่สำเร็จ รายการยังคงอยู่ใน Backend");
     }
   };
   const updateRoundChangeSettings = (nextSettings: RoundChangeSettings) => {
@@ -1047,10 +1024,10 @@ export default function MechanicModule() {
         </>}
 
         {tab === "repair" && <>
-          <div className="mechanic-inline-log-heading"><p>MECHANIC / REPAIR LOG</p><h3>บันทึกรายการซ่อม</h3><small>รายการบันทึกซ่อมแสดงต่อจากแบบฟอร์มทำรายการแจ้งซ่อม</small></div><div className="mechanic-log-toolbar"><div><strong>ส่งบันทึกรายการซ่อมไป Google Sheets</strong><span>{repairLogRecords.length ? `มี ${repairLogRecords.length} รายการรอส่ง` : "ยังไม่มีรายการรอส่ง"}{repairLogStatusQuery.data?.configured ? " · เชื่อมต่อแล้ว" : repairLogStatusQuery.isLoading ? " · กำลังตรวจสอบการเชื่อมต่อ" : " · ยังไม่ได้ตั้งค่าฝั่ง Server"}</span></div><div className="mechanic-log-toolbar-actions"><span className="mechanic-log-server-status">จัดการผ่าน Server</span><button type="button" className="sheet-send" disabled={!repairLogRecords.length || !repairLogStatusQuery.data?.configured || sendRepairLogMutation.isPending} onClick={() => { void sendRepairLogToGoogleSheets(); }}><Save size={14} /> ส่งบันทึกทั้งหมด</button></div></div>
+          <div className="mechanic-inline-log-heading"><p>MECHANIC / REPAIR LOG</p><h3>บันทึกรายการซ่อม</h3><small>รายการทั้งหมดอ่านจากฐานข้อมูล Backend และซิงก์ร่วมกันทุกเครื่อง</small></div><div className="mechanic-log-toolbar"><div><strong>ส่งรายการที่ยังไม่ส่งไป Google Sheets</strong><span>{repairLogRecords.length ? `${pendingRepairExportCount} รายการรอส่ง · ${repairLogRecords.length} รายการในประวัติ` : "ยังไม่มีรายการซ่อม"}{repairLogStatusQuery.data?.configured ? " · เชื่อมต่อแล้ว" : repairLogStatusQuery.isLoading ? " · กำลังตรวจสอบการเชื่อมต่อ" : " · ยังไม่ได้ตั้งค่าฝั่ง Server"}</span></div><div className="mechanic-log-toolbar-actions"><span className="mechanic-log-server-status">จัดการผ่าน Server</span><button type="button" className="sheet-send" disabled={!pendingRepairExportCount || !repairLogStatusQuery.data?.configured || exportRepairLogMutation.isPending} onClick={() => { void sendRepairLogToGoogleSheets(); }}><Save size={14} /> ส่งรายการที่รอ</button></div></div>
           {repairLogSheetMessage && <p className="m3-form-error" role="status">{repairLogSheetMessage}</p>}
-          <table className="mechanic-sheet-table mechanic-log-table" aria-label="บันทึกรายการซ่อม"><thead><tr><th>ID รายการ</th><th>วันที่และเวลา</th><th>เบอร์รถ</th><th>อะไหล่เบิกซ่อม</th><th>ชื่อช่างผู้ทำรายการ</th><th>ชั่วโมงสะสม</th><th>ตัวเลือก</th><th>แก้ไขรายการ</th></tr></thead><tbody>
-            {repairLogRecords.length ? repairLogRecords.map(repair => <tr key={repair.id}><td><code>{repair.id}</code></td><td>{formatThaiDate(repair.createdAt)}</td><td><b className="supervisor-colored-vehicle-number" style={{ color: getResponsibilityGroupColor(repair.vehicleNumber, vehicleState.responsibilityGroups), borderColor: getResponsibilityGroupColor(repair.vehicleNumber, vehicleState.responsibilityGroups) }}>#{repair.vehicleNumber}</b><small>{vehicleResponsibilityMeta(repair.vehicleNumber).groupLabel} · {vehicleResponsibilityMeta(repair.vehicleNumber).managerLabel}</small></td><td>{repair.parts || "—"}</td><td>{repair.technician}</td><td>{typeof repair.accumulatedHoursAtRepair === "number" ? `${repair.accumulatedHoursAtRepair.toFixed(1)} ชม.` : "ไม่มีข้อมูลเดิม"}</td><td>{repair.decision ?? repair.status}</td><td className="sheet-log-actions"><button className="sheet-edit" onClick={() => editRepair(repair)}><Pencil size={14} /> แก้ไข</button></td></tr>) : <tr><td colSpan={8} className="sheet-empty">ยังไม่มีรายการซ่อม</td></tr>}
+          <table className="mechanic-sheet-table mechanic-log-table" aria-label="บันทึกรายการซ่อม"><thead><tr><th>ID รายการ</th><th>วันที่และเวลา</th><th>เบอร์รถ</th><th>อะไหล่เบิกซ่อม</th><th>ชื่อช่างผู้ทำรายการ</th><th>ชั่วโมงสะสม</th><th>ตัวเลือก</th><th>ส่งออก</th><th>แก้ไขรายการ</th></tr></thead><tbody>
+            {mechanicRepairsQuery.isLoading ? <tr><td colSpan={9} className="sheet-empty">กำลังโหลดรายการจาก Backend…</td></tr> : mechanicRepairsQuery.isError ? <tr><td colSpan={9} className="sheet-empty">อ่านรายการจาก Backend ไม่สำเร็จ กรุณาลองใหม่</td></tr> : repairLogRecords.length ? repairLogRecords.map(repair => <tr key={repair.id}><td><code>{repair.id}</code></td><td>{formatThaiDate(repair.createdAt)}</td><td><b className="supervisor-colored-vehicle-number" style={{ color: getResponsibilityGroupColor(repair.vehicleNumber, vehicleState.responsibilityGroups), borderColor: getResponsibilityGroupColor(repair.vehicleNumber, vehicleState.responsibilityGroups) }}>#{repair.vehicleNumber}</b><small>{vehicleResponsibilityMeta(repair.vehicleNumber).groupLabel} · {vehicleResponsibilityMeta(repair.vehicleNumber).managerLabel}</small></td><td>{repair.parts || "—"}</td><td>{repair.technician}</td><td>{typeof repair.accumulatedHoursAtRepair === "number" ? `${repair.accumulatedHoursAtRepair.toFixed(1)} ชม.` : "ไม่มีข้อมูลเดิม"}</td><td>{repair.decision ?? repair.status}</td><td>{repair.exportedAt ? `ส่งแล้ว ${formatThaiDate(repair.exportedAt)}` : "รอส่ง"}</td><td className="sheet-log-actions"><button className="sheet-edit" onClick={() => editRepair(repair)}><Pencil size={14} /> แก้ไข</button></td></tr>) : <tr><td colSpan={9} className="sheet-empty">ยังไม่มีรายการซ่อม</td></tr>}
           </tbody></table>
         </>}
 
@@ -1060,7 +1037,7 @@ export default function MechanicModule() {
 
         {tab === "roundChange" && <section className="mechanic-feature-panel mechanic-round-change-panel" aria-label="ตั้งค่ารอบเปลี่ยน"><div className="mechanic-feature-heading"><div><p>MECHANIC / VEHICLE MAINTENANCE</p><h3>ตั้งค่ารอบเปลี่ยน</h3></div><RotateCcw size={22} /></div><div className="mechanic-round-change-toolbar"><button type="button" className="mechanic-visible-add-alert" onClick={openMaintenanceForm}><Plus size={17} /> เพิ่มแจ้งเตือนใหม่</button></div><div className="mechanic-round-change-tabs mechanic-alert-tab-strip" role="tablist" aria-label="แท็บรถและแจ้งเตือน"><button type="button" role="tab" aria-selected={roundChangeView === "vehicles"} className={roundChangeView === "vehicles" ? "selected" : ""} onClick={() => setRoundChangeView("vehicles")}><Table2 size={15} /> รถทุกคันในระบบ</button>{roundChangeSettings.rules.map(rule => { const dueCount = maintenanceAlerts.filter(alert => alert.ruleId === rule.id && alert.due).length; const selected = roundChangeView === "alerts" && activeMaintenanceRule?.id === rule.id; return <button type="button" role="tab" key={rule.id} aria-selected={selected} className={selected ? "selected" : ""} onClick={() => { setMaintenanceViewRuleId(rule.id); setRoundChangeView("alerts"); }}><AlertTriangle size={15} /> <span>{rule.name}</span>{dueCount > 0 && <b className="mechanic-alert-tab-count">{dueCount > 99 ? "99+" : dueCount}</b>}</button>; })}</div>{roundChangeView === "vehicles" ? <><div className="mechanic-vehicle-overview" aria-label="สรุปภาพรวมรถ"><div><span>รถทั้งหมด</span><strong>{totalFleetVehicles}</strong><small>คัน</small></div><div><span>200 ซีซี</span><strong>{maintenanceTableGroups.find(group => group.cc === "200")?.rows.length ?? 0}</strong><small>คัน</small></div><div><span>250 ซีซี</span><strong>{maintenanceTableGroups.find(group => group.cc === "250")?.rows.length ?? 0}</strong><small>คัน</small></div><div className={dueFleetVehicles > 0 ? "attention" : "ok"}><span>ถึงรอบ</span><strong>{dueFleetVehicles}</strong><small>คัน</small></div></div><div className="mechanic-vehicle-ledger">{maintenanceTableGroups.map(group => <section className="mechanic-vehicle-group" key={group.cc} aria-labelledby={`vehicle-group-${group.cc}`}><header><div><span>VEHICLE GROUP</span><h4 id={`vehicle-group-${group.cc}`}>{group.label}</h4></div><b>{group.rows.length} คัน</b></header><div className="mechanic-vehicle-table-wrap"><table className="mechanic-vehicle-table"><thead><tr><th>เบอร์รถ</th><th>แถบสะสม</th><th>สะสม / ตั้ง</th><th>เคลียร์</th></tr></thead><tbody>{group.rows.map(row => { const isDue = Boolean(activeMaintenanceRule?.enabled && row.thresholdHours > 0 && row.accumulatedHours >= row.thresholdHours); return <tr key={row.number} className={`mechanic-vehicle-alert-row ${row.level}`}><th scope="row"><span className="supervisor-status-vehicle-number"><b>#{row.number}</b><VehicleSafetyNoticeIndicator notices={safetyNotices} vehicleNumber={Number(row.number)} accentColor={getResponsibilityGroupColor(Number(row.number), vehicleState.responsibilityGroups)} onOpen={openSafetyNotices} /><small>{vehicleResponsibilityMeta(Number(row.number)).groupLabel} · {vehicleResponsibilityMeta(Number(row.number)).managerLabel}</small></span></th><td><div className={`mechanic-usage-meter ${row.level}`} aria-label={`รถหมายเลข ${row.number} ใช้ไป ${row.accumulatedHours.toFixed(1)} ชั่วโมง คิดเป็น ${row.progress.toFixed(0)} เปอร์เซ็นต์ของเกณฑ์`}><span style={{ width: `${row.progress}%` }} /></div></td><td><strong>{row.accumulatedHours.toFixed(1)}</strong><span> / {row.thresholdHours > 0 ? `${row.thresholdHours.toFixed(1)}` : "—"}</span><em className={`mechanic-ledger-alert ${isDue ? "due" : "normal"}`}>{isDue ? "ถึงรอบ" : "ปกติ"}</em></td><td><button type="button" className="mechanic-clear-hours" onClick={() => clearMaintenanceVehicleHours(row.number)} disabled={!activeMaintenanceRule || row.accumulatedHours <= 0}>เคลียร์ชั่วโมง</button></td></tr>; })}</tbody></table></div></section>)}</div></> : <><div className="mechanic-alert-page">{activeMaintenanceRule ? <><header><div><span>MAINTENANCE ALERT</span><h4>{activeMaintenanceRule.name}</h4></div><div className="mechanic-alert-page-meta"><div className="mechanic-alert-due-count"><b>{maintenanceAlerts.filter(alert => alert.ruleId === activeMaintenanceRule.id && alert.due).length}</b><small>คันถึงรอบ</small></div><div className="mechanic-alert-actions"><button type="button" className="mechanic-alert-edit" onClick={beginMaintenanceEdit}><Pencil size={13} /> แก้ไข</button><button type="button" className="mechanic-alert-cancel-rule" onClick={cancelMaintenanceRule}><Trash2 size={13} /> ยกเลิกแจ้งเตือน</button></div></div></header>{editingMaintenanceRuleId === activeMaintenanceRule.id && <div className="mechanic-maintenance-edit-form"><input autoFocus value={editingMaintenanceName} onChange={event => setEditingMaintenanceName(event.target.value)} placeholder="ชื่อหัวข้อแจ้งเตือน" aria-label="แก้ชื่อหัวข้อแจ้งเตือน" /><div className="mechanic-maintenance-add-thresholds"><label><span>200cc</span><input type="number" min="0" step="0.5" value={editingMaintenanceThresholds["200"]} onChange={event => setEditingMaintenanceThresholds(current => ({ ...current, "200": event.target.value }))} placeholder="ชั่วโมง" aria-label="แก้เกณฑ์แจ้งเตือน 200cc" /></label><label><span>250cc</span><input type="number" min="0" step="0.5" value={editingMaintenanceThresholds["250"]} onChange={event => setEditingMaintenanceThresholds(current => ({ ...current, "250": event.target.value }))} placeholder="ชั่วโมง" aria-label="แก้เกณฑ์แจ้งเตือน 250cc" /></label></div><div className="mechanic-alert-edit-actions"><button type="button" className="m3-primary" disabled={!editingMaintenanceName.trim()} onClick={saveMaintenanceEdit}><Save size={14} /> บันทึกแก้ไข</button><button type="button" className="mechanic-maintenance-cancel" onClick={cancelMaintenanceEdit}>ยกเลิกการแก้ไข</button></div></div>}<div className="mechanic-alert-page-groups">{maintenanceVehicleGroups}</div></> : <div className="mechanic-round-empty"><AlertTriangle size={20} /><p>ยังไม่มีหัวข้อแจ้งเตือน</p></div>}</div><div className="mechanic-maintenance-add">{showMaintenanceForm ? <div className="mechanic-maintenance-add-form"><input autoFocus value={newMaintenanceName} onChange={event => setNewMaintenanceName(event.target.value)} onKeyDown={event => { if (event.key === "Enter") addRoundChangeRule(); }} placeholder="หัวข้อแจ้งเตือน เช่น น้ำมันเครื่อง" aria-label="ชื่อหัวข้อบำรุงรักษา" /><div className="mechanic-maintenance-add-thresholds"><label><span>200cc</span><input type="number" min="0" step="0.5" value={newMaintenanceThresholds["200"]} onChange={event => setNewMaintenanceThresholds(current => ({ ...current, "200": event.target.value }))} placeholder="ชั่วโมง" aria-label="เกณฑ์แจ้งเตือน 200cc" /></label><label><span>250cc</span><input type="number" min="0" step="0.5" value={newMaintenanceThresholds["250"]} onChange={event => setNewMaintenanceThresholds(current => ({ ...current, "250": event.target.value }))} placeholder="ชั่วโมง" aria-label="เกณฑ์แจ้งเตือน 250cc" /></label></div><button type="button" className="m3-primary" disabled={!canCreateMaintenanceRule} onClick={addRoundChangeRule}><Plus size={15} /> สร้างยืนยัน</button><button type="button" className="mechanic-maintenance-cancel" onClick={() => { setShowMaintenanceForm(false); setNewMaintenanceName(""); setNewMaintenanceThresholds({ 200: "", 250: "" }); }}>ยกเลิก</button></div> : null}</div><div className="mechanic-maintenance-rules mechanic-alert-legacy-settings">{roundChangeSettings.rules.filter(rule => rule.id === activeMaintenanceRule?.id).map(rule => { const ruleAlerts = maintenanceAlerts.filter(alert => alert.ruleId === rule.id); const dueAlerts = ruleAlerts.filter(alert => alert.due); return <article className={`mechanic-maintenance-rule ${rule.enabled ? "enabled" : "disabled"}`} key={rule.id}><header><div><small>หัวข้อเฝ้าเตือน</small><h4>{rule.name}</h4></div><label className="mechanic-maintenance-toggle"><input type="checkbox" checked={rule.enabled} onChange={event => toggleRoundChangeRule(rule.id, event.target.checked)} /><span>{rule.enabled ? "เปิดใช้งาน" : "ปิดใช้งาน"}</span></label></header><div className="mechanic-maintenance-thresholds"><label><span>กลุ่ม 200cc</span><div><input type="number" min="0" step="0.5" value={rule.thresholdHours[200] || ""} onChange={event => updateRoundChangeThreshold(rule.id, "200", event.target.value)} placeholder="ยังไม่ตั้ง" /><b>ชั่วโมงขับ</b></div></label><label><span>กลุ่ม 250cc</span><div><input type="number" min="0" step="0.5" value={rule.thresholdHours[250] || ""} onChange={event => updateRoundChangeThreshold(rule.id, "250", event.target.value)} placeholder="ยังไม่ตั้ง" /><b>ชั่วโมงขับ</b></div></label></div><div className="mechanic-maintenance-status"><strong>{dueAlerts.length ? `ถึงรอบแล้ว ${dueAlerts.length} คัน` : "ยังไม่มีรถถึงเกณฑ์"}</strong>{dueAlerts.length > 0 && <div>{dueAlerts.map(alert => <span className="mechanic-maintenance-due" style={{ color: getResponsibilityGroupColor(Number(alert.vehicleNumber), vehicleState.responsibilityGroups), borderColor: getResponsibilityGroupColor(Number(alert.vehicleNumber), vehicleState.responsibilityGroups) }} key={`${alert.ruleId}-${alert.vehicleNumber}`}>#{alert.vehicleNumber} · {alert.accumulatedHours.toFixed(1)}/{alert.thresholdHours.toFixed(1)} ชม. · {vehicleResponsibilityMeta(Number(alert.vehicleNumber)).managerLabel}</span>)}</div>}{ruleAlerts.some(alert => !alert.due) && <small>{ruleAlerts.filter(alert => !alert.due).slice(0, 3).map(alert => `#${alert.vehicleNumber} เหลือ ${alert.remainingHours.toFixed(1)} ชม.`).join(" · ")}</small>}</div><button type="button" className="mechanic-maintenance-remove" onClick={() => removeRoundChangeRule(rule.id)}><Trash2 size={13} /> ลบหัวข้อนี้</button></article>; })}{!roundChangeSettings.rules.length && <div className="mechanic-round-empty"><RotateCcw size={20} /><p>ยังไม่มีหัวข้อเฝ้าเตือน</p><small>เพิ่มหัวข้อ เช่น น้ำมันเครื่อง ผ้าเบรก หรือแบตเตอรี่</small></div>}</div></>}</section>}
 
-        {tab === "settings" && <section className="mechanic-feature-panel" aria-label="ตั้งค่าโมดูลช่าง"><div className="mechanic-feature-heading"><div><p>MECHANIC / SETTINGS</p><h3>ตั้งค่า</h3><span>จัดการตัวเลือกที่ใช้ในรายการแจ้งซ่อม</span></div><Settings2 size={22} /></div><SpeechSettingsPanel moduleName="Mechanic" /><div className="mechanic-settings-card mechanic-sheet-settings-card"><div className="mechanic-settings-card-heading"><div><h4>ส่งประวัติซ่อมไป Google Sheets</h4><p>ตั้งค่า URL สำหรับส่งข้อมูลประวัติการซ่อมครบทุกคอลัมน์ เมื่อส่งสำเร็จระบบจะล้างเฉพาะรายการที่ส่งแล้ว</p></div><Settings2 size={18} /></div><button type="button" className="m3-secondary" onClick={() => { setShowRepairSheetSettings(current => !current); setRepairLogSettingsMessage(""); }}><Settings2 size={14} /> {showRepairSheetSettings ? "ปิดการตั้งค่า Google Sheet" : "ตั้งค่าการส่งข้อมูล Google Sheet"}</button>{showRepairSheetSettings && <div className="mechanic-sheet-settings-form"><label>URL Google Apps Script Web App<input type="url" value={repairLogScriptUrl} onChange={event => setRepairLogScriptUrl(event.target.value)} placeholder="https://script.google.com/macros/s/.../exec" autoComplete="off" /></label><small>ต้องเป็น URL ของ Google Apps Script Web App ที่ลงท้ายด้วย /exec ไม่ใช่ลิงก์เปิดไฟล์ Google Sheet โดยตรง</small><div className="mechanic-settings-add"><button type="button" className="m3-primary" disabled={updateRepairLogSettingsMutation.isPending || !repairLogScriptUrl.trim()} onClick={() => updateRepairLogSettingsMutation.mutate({ scriptUrl: repairLogScriptUrl.trim() })}><Save size={14} /> {updateRepairLogSettingsMutation.isPending ? "กำลังบันทึก…" : "บันทึก URL"}</button></div>{repairLogSettingsMessage && <p className={updateRepairLogSettingsMutation.isError ? "m3-form-error" : "m3-notice"} role="status">{repairLogSettingsMessage}</p>}</div>}</div><div className="mechanic-settings-card"><h4>ตัวเลือกอะไหล่</h4><p>รายการนี้จะแสดงในช่องอะไหล่เบิกซ่อม</p><div className="mechanic-repair-option-list">{repairPartOptions.map(option => <span key={option}>{option}<button type="button" aria-label={`ลบตัวเลือก ${option}`} onClick={() => removeRepairPartOption(option)}><Trash2 size={11} /></button></span>)}</div><div className="mechanic-settings-add"><input value={newRepairPartOption} onChange={event => setNewRepairPartOption(event.target.value)} onKeyDown={event => { if (event.key === "Enter") addRepairPartOption(); }} placeholder="เพิ่มตัวเลือกอะไหล่" aria-label="เพิ่มตัวเลือกอะไหล่" /><button type="button" className="m3-primary" onClick={addRepairPartOption}><Plus size={14} /> เพิ่ม</button></div></div><div className="mechanic-settings-card"><h4>ข้อมูลร่วมของแอป</h4><p>สถานะรถ รายชื่อผู้ใช้งาน และกลุ่มผู้รับผิดชอบอ่านจากฐานข้อมูลกลางเดียวกัน</p><button type="button" className="m3-secondary" onClick={() => { void supervisorFleetSnapshotQuery.refetch(); }}><RefreshCw size={14} /> รีเฟรชข้อมูลกลาง</button></div></section>}
+        {tab === "settings" && <section className="mechanic-feature-panel" aria-label="ตั้งค่าโมดูลช่าง"><div className="mechanic-feature-heading"><div><p>MECHANIC / SETTINGS</p><h3>ตั้งค่า</h3><span>จัดการตัวเลือกที่ใช้ในรายการแจ้งซ่อม</span></div><Settings2 size={22} /></div><SpeechSettingsPanel moduleName="Mechanic" /><div className="mechanic-settings-card mechanic-sheet-settings-card"><div className="mechanic-settings-card-heading"><div><h4>ส่งประวัติซ่อมไป Google Sheets</h4><p>ตั้งค่า URL สำหรับส่งข้อมูลประวัติการซ่อมครบทุกคอลัมน์ เมื่อส่งสำเร็จรายการจะยังอยู่ในประวัติ Backend และจะไม่ถูกส่งซ้ำ</p></div><Settings2 size={18} /></div><button type="button" className="m3-secondary" onClick={() => { setShowRepairSheetSettings(current => !current); setRepairLogSettingsMessage(""); }}><Settings2 size={14} /> {showRepairSheetSettings ? "ปิดการตั้งค่า Google Sheet" : "ตั้งค่าการส่งข้อมูล Google Sheet"}</button>{showRepairSheetSettings && <div className="mechanic-sheet-settings-form"><label>URL Google Apps Script Web App<input type="url" value={repairLogScriptUrl} onChange={event => setRepairLogScriptUrl(event.target.value)} placeholder="https://script.google.com/macros/s/.../exec" autoComplete="off" /></label><small>ต้องเป็น URL ของ Google Apps Script Web App ที่ลงท้ายด้วย /exec ไม่ใช่ลิงก์เปิดไฟล์ Google Sheet โดยตรง</small><div className="mechanic-settings-add"><button type="button" className="m3-primary" disabled={updateRepairLogSettingsMutation.isPending || !repairLogScriptUrl.trim()} onClick={() => updateRepairLogSettingsMutation.mutate({ scriptUrl: repairLogScriptUrl.trim() })}><Save size={14} /> {updateRepairLogSettingsMutation.isPending ? "กำลังบันทึก…" : "บันทึก URL"}</button></div>{repairLogSettingsMessage && <p className={updateRepairLogSettingsMutation.isError ? "m3-form-error" : "m3-notice"} role="status">{repairLogSettingsMessage}</p>}</div>}</div><div className="mechanic-settings-card"><h4>ตัวเลือกอะไหล่</h4><p>รายการนี้จะแสดงในช่องอะไหล่เบิกซ่อม</p><div className="mechanic-repair-option-list">{repairPartOptions.map(option => <span key={option}>{option}<button type="button" aria-label={`ลบตัวเลือก ${option}`} onClick={() => removeRepairPartOption(option)}><Trash2 size={11} /></button></span>)}</div><div className="mechanic-settings-add"><input value={newRepairPartOption} onChange={event => setNewRepairPartOption(event.target.value)} onKeyDown={event => { if (event.key === "Enter") addRepairPartOption(); }} placeholder="เพิ่มตัวเลือกอะไหล่" aria-label="เพิ่มตัวเลือกอะไหล่" /><button type="button" className="m3-primary" onClick={addRepairPartOption}><Plus size={14} /> เพิ่ม</button></div></div><div className="mechanic-settings-card"><h4>ข้อมูลร่วมของแอป</h4><p>สถานะรถ รายชื่อผู้ใช้งาน และกลุ่มผู้รับผิดชอบอ่านจากฐานข้อมูลกลางเดียวกัน</p><button type="button" className="m3-secondary" onClick={() => { void supervisorFleetSnapshotQuery.refetch(); }}><RefreshCw size={14} /> รีเฟรชข้อมูลกลาง</button></div></section>}
 
         </div>
       </div>
