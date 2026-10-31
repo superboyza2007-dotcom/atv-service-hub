@@ -11,6 +11,7 @@ import { serveStatic, setupVite } from "./vite";
 import { registerPttSignaling } from "../ptt-signaling";
 import { cleanupLiveMessagesHandler } from "../scheduledCleanup";
 import { reconcileVehicleSessionsHandler } from "../scheduledVehicleReconcile";
+import { ensureDailyRetentionCleanupSchedule } from "../dailyRetentionSchedule";
 import { ensureVehicleFlowReconciliationSchedule } from "../vehicleFlowSchedule";
 import { publicPlatformScript } from "./publicConfig";
 
@@ -41,6 +42,18 @@ function provisionVehicleFlowReconciliationSchedule(attempt = 1) {
       if (attempt < 5) {
         const delayMs = Math.min(60_000, 5_000 * 2 ** (attempt - 1));
         setTimeout(() => provisionVehicleFlowReconciliationSchedule(attempt + 1), delayMs);
+      }
+    });
+}
+
+function provisionDailyRetentionCleanupSchedule(attempt = 1) {
+  void ensureDailyRetentionCleanupSchedule()
+    .then(({ taskUid, created }) => console.log(`[daily-retention-cleanup] ${created ? "created" : "verified"} heartbeat task ${taskUid}`))
+    .catch(error => {
+      console.error(`[daily-retention-cleanup] heartbeat provisioning attempt ${attempt} failed`, error);
+      if (attempt < 5) {
+        const delayMs = Math.min(60_000, 5_000 * 2 ** (attempt - 1));
+        setTimeout(() => provisionDailyRetentionCleanupSchedule(attempt + 1), delayMs);
       }
     });
 }
@@ -86,7 +99,10 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
-    if (process.env.NODE_ENV === "production") provisionVehicleFlowReconciliationSchedule();
+    if (process.env.NODE_ENV === "production") {
+      provisionVehicleFlowReconciliationSchedule();
+      provisionDailyRetentionCleanupSchedule();
+    }
   });
 }
 
