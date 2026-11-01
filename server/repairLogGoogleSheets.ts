@@ -37,6 +37,50 @@ export const repairLogPayloadSchema = z.object({
 
 export type RepairLogPayload = z.infer<typeof repairLogPayloadSchema>;
 
+type RepairLogSourceRecord = {
+  id: string;
+  vehicleNumber: number;
+  symptom: string;
+  parts: string;
+  technician: string;
+  decision?: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  sourceGuideRepairId?: string | null;
+  accumulatedHoursAtRepair?: number | null;
+};
+
+function elapsedRepairHours(start: string, end: string): string {
+  const elapsed = Math.max(0, new Date(end).getTime() - new Date(start).getTime());
+  return `${(elapsed / 3_600_000).toFixed(1)} ชม.`;
+}
+
+/** Build the export only from records read by the server from its canonical database. */
+export function buildRepairLogSheetPayload(records: RepairLogSourceRecord[], sentAt = new Date()): RepairLogPayload {
+  return repairLogPayloadSchema.parse({
+    source: "guide-module-dashboard",
+    sheetName: "RepairLog",
+    columns: [...REPAIR_LOG_SHEET_COLUMNS],
+    rows: records.map(record => [
+      record.id,
+      record.createdAt,
+      record.updatedAt,
+      elapsedRepairHours(record.createdAt, record.updatedAt),
+      record.vehicleNumber,
+      record.symptom,
+      record.parts,
+      record.technician,
+      typeof record.accumulatedHoursAtRepair === "number" ? record.accumulatedHoursAtRepair : "",
+      record.status,
+      record.decision ?? "",
+      record.sourceGuideRepairId ?? "",
+      "รายการซ่อม",
+    ]),
+    sentAt: sentAt.toISOString(),
+  });
+}
+
 export function parseAllowedAppsScriptUrl(rawValue: string): URL | null {
   try {
     const url = new URL(rawValue.trim());

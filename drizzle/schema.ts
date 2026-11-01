@@ -1,4 +1,4 @@
-import { boolean, foreignKey, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { boolean, double, foreignKey, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 export const VEHICLE_STATUS_VALUES = ["ready", "repair", "pickup", "active"] as const;
 export type VehicleStatus = (typeof VEHICLE_STATUS_VALUES)[number];
@@ -103,6 +103,26 @@ export const repairJobs = mysqlTable("repairJobs", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => ({
   vehicleStatusLookup: index("repairJobs_vehicle_status_lookup").on(table.vehicleId, table.status),
+}));
+
+/** Canonical per-record mechanic repair log shared by every device. */
+export const mechanicRepairRecords = mysqlTable("mechanicRepairRecords", {
+  id: varchar("id", { length: 128 }).primaryKey(),
+  vehicleNumber: int("vehicleNumber").notNull(),
+  symptom: text("symptom").notNull(),
+  parts: text("parts").notNull(),
+  technician: varchar("technician", { length: 128 }).notNull(),
+  decision: varchar("decision", { length: 64 }),
+  status: varchar("status", { length: 64 }).notNull(),
+  createdAt: timestamp("createdAt").notNull(),
+  updatedAt: timestamp("updatedAt").notNull(),
+  sourceGuideRepairId: varchar("sourceGuideRepairId", { length: 128 }),
+  accumulatedHoursAtRepair: double("accumulatedHoursAtRepair"),
+  exportedAt: timestamp("exportedAt"),
+  archivedAt: timestamp("archivedAt"),
+}, table => ({
+  vehicleCreatedLookup: index("mechanicRepairRecords_vehicle_created_lookup").on(table.vehicleNumber, table.createdAt),
+  exportArchiveLookup: index("mechanicRepairRecords_export_archive_lookup").on(table.exportedAt, table.archivedAt),
 }));
 
 /** Standby/Active sessions reserve a vehicle until completed or cancelled. */
