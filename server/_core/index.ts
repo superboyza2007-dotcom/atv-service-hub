@@ -11,6 +11,8 @@ import { serveStatic, setupVite } from "./vite";
 import { registerPttSignaling } from "../ptt-signaling";
 import { cleanupLiveMessagesHandler } from "../scheduledCleanup";
 import { reconcileVehicleSessionsHandler } from "../scheduledVehicleReconcile";
+import { reconcileExpiredGuideSnapshotSessions } from "../guideSessionReconcile";
+import { reconcileExpiredVehicleSessions } from "../vehicleFlowService";
 import { ensureDailyRetentionCleanupSchedule } from "../dailyRetentionSchedule";
 import { ensureVehicleFlowReconciliationSchedule } from "../vehicleFlowSchedule";
 import { publicPlatformScript } from "./publicConfig";
@@ -56,6 +58,39 @@ function provisionDailyRetentionCleanupSchedule(attempt = 1) {
         setTimeout(() => provisionDailyRetentionCleanupSchedule(attempt + 1), delayMs);
       }
     });
+}
+
+let reconciliationInProgress = false;
+
+/**
+ * Keep expiry behavior working while a managed instance is serving traffic.
+ * The platform heartbeat remains the durable backstop, but this loop avoids
+ * waiting on delayed heartbeat delivery in an on-demand WebDev instance.
+ */
+async function reconcileExpiredSessionsInProcess() {
+  if (reconciliationInProgress) return;
+  reconciliationInProgress = true;
+  try {
+    const [vehicleResult, guideResult] = await Promise.all([
+      reconcileExpiredVehicleSessions(),
+      reconcileExpiredGuideSnapshotSessions(),
+    ]);
+    if (vehicleResult.completedSessionCount || guideResult.expiredSessionCount) {
+      console.log("[vehicle-session-reconcile] in-process expiry", {
+        vehicle: vehicleResult,
+        guide: guideResult,
+      });
+    }
+  } catch (error) {
+    console.error("[vehicle-session-reconcile] in-process reconciliation failed", error);
+  } finally {
+    reconciliationInProgress = false;
+  }
+}
+
+function startInProcessReconciliationLoop() {
+  void reconcileExpiredSessionsInProcess();
+  setInterval(() => void reconcileExpiredSessionsInProcess(), 15_000);
 }
 
 async function startServer() {
@@ -105,6 +140,7 @@ async function startServer() {
     if (process.env.NODE_ENV !== "development") {
       provisionVehicleFlowReconciliationSchedule();
       provisionDailyRetentionCleanupSchedule();
+      startInProcessReconciliationLoop();
     }
   });
 }
