@@ -205,9 +205,14 @@ export async function listHeartbeatJobs(
   const body: Record<string, unknown> = {};
   if (pagination?.page !== undefined) body.page = pagination.page;
   if (pagination?.pageSize !== undefined) body.pageSize = pagination.pageSize;
-  return callForge<{
+  const result = await callForge<Partial<{
     total: number;
     actorUserId: string;
     jobs: HeartbeatJobInfo[];
-  }>("ListHeartbeatJobs", body, userSession);
+  }>>("ListHeartbeatJobs", body, userSession);
+  return {
+    total: typeof result.total === "number" ? result.total : 0,
+    actorUserId: typeof result.actorUserId === "string" ? result.actorUserId : "",
+    jobs: Array.isArray(result.jobs) ? result.jobs : [],
+  };
 }
