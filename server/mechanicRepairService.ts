@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { mechanicRepairRecords } from "../drizzle/schema";
 import { getAppOperationsSnapshot, getDb, upsertAppOperationsSnapshot } from "./db";
 
@@ -176,10 +176,27 @@ export async function listPendingMechanicRepairRecords(limit = 1_000): Promise<M
   return rows.map(toApiRecord);
 }
 
-export async function markMechanicRepairRecordsExported(ids: string[], exportedAt: Date): Promise<number> {
-  if (!ids.length) return 0;
+/** Remove only confirmed records atomically; a changed row remains for a later export. */
+export async function deleteMechanicRepairRecordsAfterExport(records: Array<{ id: string; updatedAt: string }>): Promise<number> {
   const db = await requireDb();
-  const result = await db.update(mechanicRepairRecords).set({ exportedAt, updatedAt: exportedAt })
-    .where(and(inArray(mechanicRepairRecords.id, ids), isNull(mechanicRepairRecords.archivedAt), isNull(mechanicRepairRecords.exportedAt)));
-  return Number(result[0]?.affectedRows ?? 0);
+  return db.transaction(async tx => {
+    let deleted = 0;
+    for (const record of records) {
+      const updatedAt = new Date(record.updatedAt);
+      if (!Number.isFinite(updatedAt.getTime())) continue;
+      const result = await tx.delete(mechanicRepairRecords).where(and(
+        eq(mechanicRepairRecords.id, record.id),
+        eq(mechanicRepairRecords.updatedAt, updatedAt),
+        isNull(mechanicRepairRecords.archivedAt),
+        isNull(mechanicRepairRecords.exportedAt),
+      ));
+      deleted += Number(result[0]?.affectedRows ?? 0);
+    }
+    const previouslyExported = await tx.delete(mechanicRepairRecords).where(and(
+      isNotNull(mechanicRepairRecords.exportedAt),
+      isNull(mechanicRepairRecords.archivedAt),
+    ));
+    deleted += Number(previouslyExported[0]?.affectedRows ?? 0);
+    return deleted;
+  });
 }

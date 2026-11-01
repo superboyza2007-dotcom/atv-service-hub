@@ -50,6 +50,13 @@
       "when": 1793419820419,
       "tag": "0006_mechanic_repair_records",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1793546498430,
+      "tag": "0007_mechanic_repair_export_schedule",
+      "breakpoints": true
     }
   ]
 }

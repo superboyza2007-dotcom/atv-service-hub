@@ -314,6 +314,20 @@ export const vehicleFlowSchedules = mysqlTable("vehicleFlowSchedules", {
   taskUidLookup: index("vehicleFlowSchedules_task_uid_lookup").on(table.scheduleCronTaskUid),
 }));
 
+/** Durable identity and last-run marker for the daily mechanic repair-log export. */
+export const mechanicRepairExportSchedules = mysqlTable("mechanicRepairExportSchedules", {
+  id: int("id").autoincrement().primaryKey(),
+  jobKey: varchar("jobKey", { length: 64 }).notNull(),
+  scheduleCronTaskUid: varchar("scheduleCronTaskUid", { length: 65 }),
+  lastRunAt: timestamp("lastRunAt"),
+  isEnabled: int("isEnabled").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  jobKeyUnique: uniqueIndex("mechanicRepairExportSchedules_jobKey_unique").on(table.jobKey),
+  taskUidLookup: index("mechanicRepairExportSchedules_task_uid_lookup").on(table.scheduleCronTaskUid),
+}));
+
 export type User = typeof users.$inferSelect;
 export type AppDirectoryUser = typeof appDirectoryUsers.$inferSelect;
 export type InsertAppDirectoryUser = typeof appDirectoryUsers.$inferInsert;

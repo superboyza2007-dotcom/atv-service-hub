@@ -11,8 +11,10 @@ import { serveStatic, setupVite } from "./vite";
 import { registerPttSignaling } from "../ptt-signaling";
 import { cleanupLiveMessagesHandler } from "../scheduledCleanup";
 import { reconcileVehicleSessionsHandler } from "../scheduledVehicleReconcile";
+import { exportMechanicRepairLogHandler } from "../scheduledMechanicRepairExport";
 import { ensureDailyRetentionCleanupSchedule } from "../dailyRetentionSchedule";
 import { ensureVehicleFlowReconciliationSchedule } from "../vehicleFlowSchedule";
+import { ensureMechanicRepairExportSchedule } from "../mechanicRepairExportSchedule";
 import { ensureDatabaseMigrations } from "../dbMigrations";
 import { publicPlatformScript } from "./publicConfig";
 
@@ -56,6 +58,18 @@ function provisionDailyRetentionCleanupSchedule(attempt = 1) {
         const delayMs = Math.min(60_000, 5_000 * 2 ** (attempt - 1));
         setTimeout(() => provisionDailyRetentionCleanupSchedule(attempt + 1), delayMs);
       }
+  });
+}
+
+function provisionMechanicRepairExportSchedule(attempt = 1) {
+  void ensureMechanicRepairExportSchedule()
+    .then(({ taskUid, created }) => console.log(`[mechanic-repair-export] ${created ? "created" : "verified"} heartbeat task ${taskUid}`))
+    .catch(error => {
+      console.error(`[mechanic-repair-export] heartbeat provisioning attempt ${attempt} failed`, error);
+      if (attempt < 5) {
+        const delayMs = Math.min(60_000, 5_000 * 2 ** (attempt - 1));
+        setTimeout(() => provisionMechanicRepairExportSchedule(attempt + 1), delayMs);
+      }
     });
 }
 
@@ -74,6 +88,7 @@ async function startServer() {
   });
   app.post("/api/scheduled/cleanup-live-messages", cleanupLiveMessagesHandler);
   app.post("/api/scheduled/reconcile-vehicle-sessions", reconcileVehicleSessionsHandler);
+  app.post("/api/scheduled/export-mechanic-repair-log", exportMechanicRepairLogHandler);
   app.get("/api/health", (_req, res) => {
     res.status(200).json({ status: "ok" });
   });
@@ -107,6 +122,7 @@ async function startServer() {
     if (process.env.NODE_ENV !== "development") {
       provisionVehicleFlowReconciliationSchedule();
       provisionDailyRetentionCleanupSchedule();
+      provisionMechanicRepairExportSchedule();
     }
   });
 }
