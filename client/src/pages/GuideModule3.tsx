@@ -6,6 +6,7 @@ import VehicleCard from "@/components/VehicleCard";
 import { ActiveVehicleDetailList } from "@/components/ActiveVehicleDetailList";
 import { VehicleChoiceList, type VehicleChoiceItem } from "@/components/VehicleChoiceList";
 import { ServerActiveSessionChat } from "@/components/ServerActiveSessionChat";
+import { SessionActivitySheet } from "@/components/SessionActivitySheet";
 import { VehicleSafetyNoticeDialog as SharedVehicleSafetyNoticeDialog, VehicleSafetyNoticeIndicator } from "@/components/VehicleSafetyNotice";
 import { PttRoomPanel } from "@/components/PttRoom";
 import CommunicationChat from "@/components/CommunicationChat";
@@ -21,7 +22,7 @@ import { removeOrphanedVehicleSafetyNotices, upsertVehicleSafetyNotice, type Veh
 import { buildSupervisorInputVehicles, buildSupervisorUserDirectoryStatusModel, buildSupervisorUserDirectoryStatusSource } from "@/lib/supervisor-data";
 import { groupVehicleOptionsByResponsibility, prioritizeVehicleGroupsByQueue } from "@/lib/vehicle-selection-groups";
 import { formatSessionCountdown, remainingSessionSeconds, sessionTiming } from "@/lib/session-countdown";
-import { appendSessionActivity, createSessionActivity, sessionActivitiesOrFallback, sortSessionActivities, type SessionActivity } from "@/lib/session-activity-log";
+import { appendSessionActivity, createSessionActivity, type SessionActivity } from "@/lib/session-activity-log";
 import { OPERATIONS_SNAPSHOT_KEYS, parseOperationsSnapshot, serializeOperationsSnapshot } from "@/lib/operations-snapshot";
 import { mergeVehiclePickupRequests, type VehicleFlowSnapshot } from "@/lib/vehicle-flow-snapshot";
 import { mergeSessionChatMessages } from "@/lib/session-chat-sync";
@@ -102,17 +103,6 @@ function formatTime(value?: string) { return value ? new Date(value).toLocaleTim
 function DailyActiveCard({ session, members, onOpen }: { session: ModuleSession; members: GuideMember[]; onOpen: () => void }) {
   const names = session.memberIds.map(id => members.find(member => member.id === id)?.name).filter((name): name is string => Boolean(name)).join(" · ") || session.activeUserName || "ไม่ระบุผู้ปฏิบัติงาน";
   return <button type="button" className="m3-daily-board-card m3-daily-board-card-compact" aria-label={`ดูรายละเอียด ${names}`} onClick={onOpen}><strong>{names}</strong><span>โปรแกรม {session.durationMinutes} นาที</span><small>R {session.riderCount} · P {session.passengerCount}</small></button>;
-}
-
-function SessionActivitySheet({ session }: { session: ModuleSession }) {
-  const activities = sortSessionActivities(sessionActivitiesOrFallback(session));
-  const completionSummary = session.completionTiming ? `${completionTimingDetail(session.completionTiming)} · ใช้เวลาจริง ${formatCompletionDifference(session.completionTiming.actualSeconds)}` : undefined;
-  const completedByLabel = session.completedByName ? `ผู้จบรายการ: ${session.completedByName}` : undefined;
-  return <section className="m3-activity-sheet" aria-labelledby="m3-activity-title">
-    <div className="m3-activity-heading"><div><p>SESSION ACTIVITY LOG</p><h3 id="m3-activity-title">ใบบันทึกการปฏิบัติงาน</h3></div><History size={18} aria-hidden="true" /></div>
-    {completionSummary && <div className={`m3-completion-summary ${session.completionTiming?.overtimeSeconds ? "is-overtime" : session.completionTiming?.earlySeconds ? "is-early" : "is-on-time"}`}><strong>{completionSummary}</strong><span>กำหนดโปรแกรม {formatCompletionDifference(session.completionTiming?.plannedSeconds ?? 0)}</span>{completedByLabel && <small>{completedByLabel}</small>}</div>}
-    {activities.length ? <ol className="m3-activity-list">{activities.map(activity => <li key={activity.id}><span className="m3-activity-dot" aria-hidden="true" /><div><strong>{activity.action}</strong>{activity.detail && <p>{activity.detail}</p>}<small>{activity.actorName} · {formatTime(activity.createdAt)}</small></div></li>)}</ol> : <p className="m3-empty">ยังไม่มีบันทึกกิจกรรม</p>}
-  </section>;
 }
 
 type SessionFollowPosition = { edge: "left" | "right"; top: number };

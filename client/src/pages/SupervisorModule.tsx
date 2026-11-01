@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Activity, AlertTriangle, ArrowLeft, BarChart3, CalendarDays, Check, Clock3, Database, Dices, LayoutDashboard, ListChecks, MessageCircle, Plus, RefreshCw, Settings2, Truck, UsersRound } from "lucide-react";
 import { ActiveVehicleDetailList } from "@/components/ActiveVehicleDetailList";
+import { SessionActivitySheet } from "@/components/SessionActivitySheet";
 import { VehicleChoiceList, VehicleReplacementPanel, type VehicleChoiceItem } from "@/components/VehicleChoiceList";
 import { VehicleSafetyNoticeDialog, VehicleSafetyNoticeIndicator, VehicleSafetyNoticeList } from "@/components/VehicleSafetyNotice";
 import { ActiveSessionChat, type ActiveSessionChatMessage } from "@/components/ActiveSessionChat";
@@ -32,6 +33,7 @@ import { OPERATIONS_SNAPSHOT_KEYS, parseOperationsSnapshot, serializeOperationsS
 import { mergeVehiclePickupRequests, mergeVehicleSafetyNotices, type VehicleFlowSnapshot } from "@/lib/vehicle-flow-snapshot";
 import { mergeSessionChatMessages } from "@/lib/session-chat-sync";
 import { mergeSharedSessions } from "@/lib/shared-session-sync";
+import { sortVehicleHistory, vehicleHistoryOrFallback } from "@/lib/session-vehicle-history";
 import { filterSupervisorRoundTableUsers } from "@/lib/mechanic-round-table";
 import type { PayoutSessionLike, PersonalPayoutValues } from "@/lib/mechanic-payout-table";
 import { SupervisorPayoutOverview } from "@/components/SupervisorPayoutOverview";
@@ -108,6 +110,10 @@ function persistCanonicalVehicleState(state: { vehicleGroups: VehicleResponsibil
 function formatDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("th-TH", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Bangkok" }).format(date);
+}
+
+function formatTime(value?: string) {
+  return value ? new Date(value).toLocaleTimeString("th-TH", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit" }) : "—";
 }
 
 function countMechanicItems(state: MechanicState, key: "alerts" | "repairs") {
@@ -612,7 +618,7 @@ export default function SupervisorModule() {
     { id: "database", label: "ฐานข้อมูล", icon: Database },
   ];
   const selectedGuideSession = findSupervisorGuideSession(guideSessions, selectedGuideSessionId);
-  const selectedSupervisorTiming = selectedGuideSession?.status === "Active"
+  const selectedSupervisorTiming = (selectedGuideSession?.status === "Active" || selectedGuideSession?.status === "TIME_EXPIRED")
     ? supervisorActiveTimeLabel(selectedGuideSession.startedAt, selectedGuideSession.durationMinutes, now, selectedGuideSession.scheduledEndAt, selectedGuideSession.timerEnabled !== false, selectedGuideSession.expiryBehavior)
     : undefined;
   useEffect(() => {
@@ -748,19 +754,68 @@ export default function SupervisorModule() {
       safetyNotices,
     };
   });
-  const supervisorSessionDetail = selectedGuideSession ? <section className="m3-panel supervisor-guide-panel supervisor-session-detail" aria-labelledby="supervisor-session-detail-title">
-    <div className="m3-panel-title"><div><p>ACTIVE SESSION / SUPERVISOR VIEW</p><h2 id="supervisor-session-detail-title">กำลังปฏิบัติงาน</h2><small>{selectedGuideSession.sessionId} · {selectedGuideSession.status === "Active" ? "กำลังทำงาน" : selectedGuideSession.status === "Standby" ? "รอเริ่มงาน" : "จบแล้ว"}</small></div><button type="button" className="m3-icon-button" onClick={closeGuideSession} aria-label="กลับหน้า Dashboard"><ArrowLeft size={18} /></button></div>
-    {selectedGuideSession.status === "Active" && selectedSupervisorTiming && selectedGuideSession.timerEnabled !== false && <div className={`m3-timer ${selectedSupervisorTiming.overtimeSeconds > 0 ? "m3-timer-overtime" : ""}`}><strong>{selectedSupervisorTiming.overtimeSeconds > 0 ? `+${formatSessionCountdown(selectedSupervisorTiming.overtimeSeconds)}` : formatSessionCountdown(selectedSupervisorTiming.remainingSeconds)}</strong><span>{selectedSupervisorTiming.overtimeSeconds > 0 ? selectedGuideSession.expiryBehavior === "auto_complete" ? "ครบเวลา · ระบบกำลังจบรายการ" : selectedGuideSession.expiryBehavior === "overtime" ? "เกินเวลา · นับเวลาต่อ" : "เกินเวลา · รอยืนยันการจบงาน" : `เหลือเวลา · โปรแกรม ${selectedGuideSession.durationMinutes} นาที`}</span></div>}
-    <div className="supervisor-session-summary"><div><span>ผู้ทำรายการ</span><strong>{selectedGuideSession.activeUserName || "ไม่ระบุ"}</strong></div><div><span>สมาชิก</span><strong className="m3-member-name-list">{selectedGuideSession.memberIds.map(id => { const member = guideMembers.find(item => item.id === id); return member ? <span className={`m3-member-name ${memberGroupClass(snapshot.directoryUsers.find(user => String(user.id) === String(member.id))?.group)}`} key={member.id}>{member.name}</span> : null; })}</strong></div><div><span>รถในรายการ</span><ActiveVehicleDetailList sessionId={selectedGuideSession.sessionId} vehicles={selectedGuideSession.vehicleIds.map(id => { const number = Number(id.replace(/^m3-v/, "")); const row = vehicles.find(vehicle => vehicle.number === number); return { id, number, cc: `${row?.cc ?? "—"}cc`, managers: resolveVehicleManagerNames(number, snapshot.vehicleState.responsibilityGroups, snapshot.directoryUsers, row?.manager ? row.manager.split(" · ") : []), accentColor: row?.color }; })} activeStaff={selectedGuideSession.memberIds.map(id => guideMembers.find(member => member.id === id)?.name).filter((name): name is string => Boolean(name))} activeRoles={selectedGuideSession.memberIds.map(id => { const user = snapshot.directoryUsers.find(item => String(item.id) === String(id)); return user ? supervisorGroupLabel(user.group) : "ผู้ใช้งาน"; })} safetyNotices={safetyNotices} onSafetyNoticeOpen={openSafetyNotices} responsibilityGroups={snapshot.vehicleState.responsibilityGroups} managerDirectory={snapshot.directoryUsers} /></div><div><span>โปรแกรม</span><strong>{selectedGuideSession.durationMinutes} นาที · R {selectedGuideSession.riderCount} · P {selectedGuideSession.passengerCount}</strong></div>{selectedGuideSession.completedByName && <div><span>ผู้จบรายการ</span><strong>{selectedGuideSession.completedByName}</strong></div>}</div>
-    <div className="m3-notice m3-readonly-notice" role="status">โหมด Supervisor · คุณมีสิทธิ์จัดการรายการ Active นี้</div>
-    {selectedGuideSession.status !== "Completed" && <div className="m3-action-grid supervisor-active-action-grid"><button type="button" onClick={() => setSupervisorDetailAction("members")}><UsersRound size={15} /> เพิ่มสมาชิก</button><button type="button" onClick={() => setSupervisorDetailAction("addVehicle")}><Plus size={15} /> เพิ่มรถ</button><button type="button" onClick={() => { const fromId = selectedGuideSession?.vehicleIds[0] ?? ""; const replacement = supervisorAvailableVehicles[0]; setSupervisorReplaceFromId(fromId); setSupervisorReplaceToId(replacement ? `m3-v${replacement.number}` : ""); setSupervisorDetailAction("replaceVehicle"); }}><RefreshCw size={15} /> เปลี่ยนรถ</button><button type="button" onClick={() => setSupervisorDetailAction("removeVehicle")}><Truck size={15} /> เอารถออก</button><button type="button" className="m3-primary" onClick={requestCompleteGuideSessionFromSupervisor}><Check size={15} /> จบ/คืนรถ</button></div>}
-    {supervisorDetailAction === "members" && <div className="m3-modal-list supervisor-inline-action-list">{supervisorAvailableMembers.length ? supervisorAvailableMembers.map(member => <button type="button" key={member.id} onClick={() => addSupervisorMember(member.id)}><b className={memberGroupClass(snapshot.directoryUsers.find(user => String(user.id) === String(member.id))?.group)}>{member.name}</b><small>เพิ่มเข้า Active</small></button>) : <p className="m3-empty">ไม่มีสมาชิกที่ว่างให้เพิ่ม</p>}</div>}
-    {supervisorDetailAction === "replaceVehicle" ? <VehicleReplacementPanel currentItems={supervisorCurrentVehicleItems} replacementItems={supervisorReplacementItems} selectedFromId={supervisorReplaceFromId} selectedToId={supervisorReplaceToId} onFromSelect={setSupervisorReplaceFromId} onToSelect={setSupervisorReplaceToId} onConfirm={() => replaceSupervisorVehicle(supervisorReplaceToId, supervisorReplaceFromId)} responsibilityGroups={snapshot.vehicleState.responsibilityGroups} managerDirectory={snapshot.directoryUsers} onSafetyNoticeOpen={openSafetyNotices} confirmDisabled={!supervisorReplaceFromId || !supervisorReplaceToId} /> : supervisorDetailAction && supervisorDetailAction !== "members" && <VehicleChoiceList items={supervisorChoiceItems} responsibilityGroups={snapshot.vehicleState.responsibilityGroups} managerDirectory={snapshot.directoryUsers} onSafetyNoticeOpen={openSafetyNotices} onSelect={vehicleId => supervisorDetailAction === "removeVehicle" ? removeSupervisorVehicle(vehicleId) : addVehicleToSupervisorSession(vehicleId)} ariaLabel={supervisorDetailAction === "removeVehicle" ? "เลือกรถที่จะนำออกจาก Active" : "เลือกรถเพื่อเพิ่มเข้า Active"} actionLabel={supervisorDetailAction === "removeVehicle" ? "เอาออก" : "เพิ่มรถ"} emptyLabel={supervisorDetailAction === "removeVehicle" ? "ไม่มีรถใน Active" : "ไม่มีรถพร้อมใช้ให้เพิ่ม"} />}
-    <ServerActiveSessionChat sessionId={selectedGuideSession.sessionId} module="supervisor" canSend={selectedGuideSession.status === "Active"} />
-    <div className="supervisor-session-actions"><button type="button" className="supervisor-refresh" onClick={closeGuideSession}><ArrowLeft size={16} /> กลับหน้าแรก</button></div>
-    {notice && <p className="m3-notice">{notice}</p>}
-    {supervisorCompletionPrompt && isActiveCompletionPromptFor(supervisorCompletionPrompt, selectedGuideSession.sessionId) && (() => { const copy = activeCompletionCopy(supervisorCompletionPrompt.kind); return <div className="supervisor-modal-backdrop" role="presentation"><section className="supervisor-user-modal supervisor-completion-modal" role="dialog" aria-modal="true" aria-labelledby="supervisor-completion-title"><div className="supervisor-modal-heading"><div><p>{copy.eyebrow}</p><h3 id="supervisor-completion-title">{copy.title}</h3></div><button type="button" className="supervisor-modal-close" onClick={() => supervisorCompletionPrompt.kind === "expired" ? keepGuideSessionOpenAfterExpiry() : setSupervisorCompletionPrompt(null)} aria-label="ปิดหน้าต่างยืนยัน">×</button></div><p className="supervisor-completion-message">{copy.message}</p><div className="supervisor-modal-actions"><button type="button" className="supervisor-modal-cancel" onClick={() => supervisorCompletionPrompt.kind === "expired" ? keepGuideSessionOpenAfterExpiry() : setSupervisorCompletionPrompt(null)}>{copy.secondary}</button><button type="button" className="supervisor-modal-submit" onClick={completeGuideSessionFromSupervisor}><Check size={15} /> ยืนยัน</button></div></section></div>; })()}
-  </section> : null;
+  const selectedSupervisorVehicleHistory = selectedGuideSession
+    ? sortVehicleHistory(vehicleHistoryOrFallback(selectedGuideSession, vehicles.map(vehicle => ({ id: `m3-v${vehicle.number}`, number: String(vehicle.number), cc: vehicle.cc })), selectedGuideSession.createdAt))
+    : [];
+  const selectedGuideSessionIsActive = selectedGuideSession?.status === "Active" || selectedGuideSession?.status === "TIME_EXPIRED";
+  const supervisorSessionDetail = selectedGuideSession ? selectedGuideSession.status === "Completed" ? <>
+    <button className="m3-back" type="button" onClick={closeGuideSession}><ArrowLeft size={16} /> กลับบอร์ดบันทึกรายวัน</button>
+    <section className="m3-panel supervisor-guide-panel supervisor-session-detail">
+      <div className="m3-panel-title"><div><p>SESSION DETAIL / COMPLETED · {selectedGuideSession.sessionId}</p><h2>รายละเอียดรายการที่จบแล้ว</h2></div><span>จบงาน</span></div>
+      <div className="m3-detail">
+        <span>เริ่มงาน</span><b>{formatTime(selectedGuideSession.startedAt)}</b>
+        <span>จบงาน</span><b>{formatTime(selectedGuideSession.completedAt)}</b>
+        <span>โปรแกรม / ลูกค้า</span><b>{selectedGuideSession.durationMinutes} นาที · R {selectedGuideSession.riderCount} · P {selectedGuideSession.passengerCount}</b>
+        <span>ผู้ทำรายการ</span><b>{selectedGuideSession.activeUserName ?? "ยังไม่ระบุ"}</b>
+        <span>สมาชิก</span><b>{selectedGuideSession.memberIds.map(id => guideMembers.find(member => member.id === id)?.name).filter(Boolean).join(" · ") || "ไม่ระบุ"}</b>
+        <span>รถที่ใช้ตลอดรายการ</span>
+        <div className="m3-history-vehicle-groups">{(["200", "250"] as const).map(cc => {
+          const group = selectedSupervisorVehicleHistory.filter(item => item.cc === cc);
+          return <section className="m3-history-vehicle-group" key={cc}>
+            <div className="m3-history-vehicle-heading"><strong>{cc} ซีซี</strong><span>{group.length} คัน</span></div>
+            {group.length ? <div className="m3-history-vehicle-grid">{group.map(item => {
+              const number = Number(item.number);
+              const row = vehicles.find(vehicle => vehicle.number === number);
+              const meta = resolveVehicleResponsibilityView(number, snapshot.vehicleState.responsibilityGroups, snapshot.directoryUsers, row?.manager ? row.manager.split(" · ") : [], row?.color);
+              return <div className={`m3-history-vehicle-card ${item.removedAt ? "removed" : ""}`} key={item.vehicleId}>
+                <b>#{item.number}</b><span>{item.cc}cc</span><small>{meta.groupLabel} · {meta.managerLabel}</small>
+                <small>{item.removedAt ? `นำออกก่อนจบ · ${formatTime(item.removedAt)}` : "อยู่ในรายการตอนจบ"}</small>
+              </div>;
+            })}</div> : <p className="m3-empty">ไม่มีรถในหมวดนี้</p>}
+          </section>;
+        })}</div>
+        <SessionActivitySheet session={selectedGuideSession} />
+      </div>
+    </section>
+  </> : <>
+    <button className="m3-back" type="button" onClick={closeGuideSession}><ArrowLeft size={16} /> กลับหน้าแรก</button>
+    <section className="m3-panel m3-active-panel supervisor-session-detail" aria-labelledby="supervisor-session-detail-title">
+      <div className="m3-panel-title"><div><p>{selectedGuideSessionIsActive ? `2.3 / ACTIVE · ${selectedGuideSession.sessionId}` : `SESSION / STANDBY · ${selectedGuideSession.sessionId}`}</p><h2 id="supervisor-session-detail-title">{selectedGuideSessionIsActive ? "กำลังปฏิบัติงาน" : "รอเริ่มงาน"}</h2></div>{selectedGuideSessionIsActive ? <span className="m3-live"><i /> LIVE</span> : <span>Standby</span>}</div>
+      {selectedGuideSessionIsActive && selectedSupervisorTiming && selectedGuideSession.timerEnabled !== false && <div className={`m3-timer ${selectedSupervisorTiming.overtimeSeconds > 0 ? "m3-timer-overtime" : ""}`}><strong>{selectedSupervisorTiming.overtimeSeconds > 0 ? `+${formatSessionCountdown(selectedSupervisorTiming.overtimeSeconds)}` : formatSessionCountdown(selectedSupervisorTiming.remainingSeconds)}</strong><span>{selectedSupervisorTiming.overtimeSeconds > 0 ? selectedGuideSession.expiryBehavior === "auto_complete" ? "ครบเวลา · ระบบกำลังจบรายการ" : selectedGuideSession.expiryBehavior === "overtime" ? "เกินเวลา · นับเวลาต่อ" : "เกินเวลา · รอยืนยันการจบงาน" : `เหลือเวลา · โปรแกรม ${selectedGuideSession.durationMinutes} นาที`}</span></div>}
+      <div className="m3-detail">
+        <div className="m3-notice m3-readonly-notice" role="status">โหมด Supervisor · คุณมีสิทธิ์จัดการรายการนี้</div>
+        <span>รถทั้งหมด</span>
+        <ActiveVehicleDetailList sessionId={selectedGuideSession.sessionId} vehicles={selectedGuideSession.vehicleIds.map(id => {
+          const number = Number(id.replace(/^m3-v/, ""));
+          const row = vehicles.find(vehicle => vehicle.number === number);
+          return { id, number, cc: `${row?.cc ?? "—"}cc`, managers: resolveVehicleManagerNames(number, snapshot.vehicleState.responsibilityGroups, snapshot.directoryUsers, row?.manager ? row.manager.split(" · ") : []), accentColor: row?.color };
+        })} activeStaff={selectedGuideSession.memberIds.map(id => guideMembers.find(member => member.id === id)?.name).filter((name): name is string => Boolean(name))} activeRoles={selectedGuideSession.memberIds.map(id => {
+          const user = snapshot.directoryUsers.find(item => String(item.id) === String(id));
+          return user ? supervisorGroupLabel(user.group) : "ผู้ใช้งาน";
+        })} safetyNotices={safetyNotices} onSafetyNoticeOpen={openSafetyNotices} responsibilityGroups={snapshot.vehicleState.responsibilityGroups} managerDirectory={snapshot.directoryUsers} />
+        <span>ผู้ทำรายการ</span><b>{selectedGuideSession.activeUserName ?? "ยังไม่ระบุ"}</b>
+        <span>สมาชิก</span><b>{selectedGuideSession.memberIds.map(id => guideMembers.find(member => member.id === id)?.name).filter(Boolean).join(" · ") || "ไม่ระบุ"}</b>
+        <span>ผู้ใช้บริการ</span><b>R {selectedGuideSession.riderCount} · P {selectedGuideSession.passengerCount}</b>
+      </div>
+      <SessionActivitySheet session={selectedGuideSession} />
+      <div className="m3-action-grid supervisor-active-action-grid"><button type="button" onClick={() => setSupervisorDetailAction("members")}><UsersRound size={15} /> เพิ่มสมาชิก</button><button type="button" onClick={() => setSupervisorDetailAction("addVehicle")}><Plus size={15} /> เพิ่มรถ</button><button type="button" onClick={() => { const fromId = selectedGuideSession?.vehicleIds[0] ?? ""; const replacement = supervisorAvailableVehicles[0]; setSupervisorReplaceFromId(fromId); setSupervisorReplaceToId(replacement ? `m3-v${replacement.number}` : ""); setSupervisorDetailAction("replaceVehicle"); }}><RefreshCw size={15} /> เปลี่ยนรถ</button><button type="button" onClick={() => setSupervisorDetailAction("removeVehicle")}><Truck size={15} /> เอารถออก</button><button type="button" className="m3-primary" onClick={requestCompleteGuideSessionFromSupervisor}><Check size={15} /> จบ/คืนรถ</button></div>
+      {supervisorDetailAction === "members" && <div className="m3-modal-list supervisor-inline-action-list">{supervisorAvailableMembers.length ? supervisorAvailableMembers.map(member => <button type="button" key={member.id} onClick={() => addSupervisorMember(member.id)}><b className={memberGroupClass(snapshot.directoryUsers.find(user => String(user.id) === String(member.id))?.group)}>{member.name}</b><small>เพิ่มเข้า Active</small></button>) : <p className="m3-empty">ไม่มีสมาชิกที่ว่างให้เพิ่ม</p>}</div>}
+      {supervisorDetailAction === "replaceVehicle" ? <VehicleReplacementPanel currentItems={supervisorCurrentVehicleItems} replacementItems={supervisorReplacementItems} selectedFromId={supervisorReplaceFromId} selectedToId={supervisorReplaceToId} onFromSelect={setSupervisorReplaceFromId} onToSelect={setSupervisorReplaceToId} onConfirm={() => replaceSupervisorVehicle(supervisorReplaceToId, supervisorReplaceFromId)} responsibilityGroups={snapshot.vehicleState.responsibilityGroups} managerDirectory={snapshot.directoryUsers} onSafetyNoticeOpen={openSafetyNotices} confirmDisabled={!supervisorReplaceFromId || !supervisorReplaceToId} /> : supervisorDetailAction && supervisorDetailAction !== "members" && <VehicleChoiceList items={supervisorChoiceItems} responsibilityGroups={snapshot.vehicleState.responsibilityGroups} managerDirectory={snapshot.directoryUsers} onSafetyNoticeOpen={openSafetyNotices} onSelect={vehicleId => supervisorDetailAction === "removeVehicle" ? removeSupervisorVehicle(vehicleId) : addVehicleToSupervisorSession(vehicleId)} ariaLabel={supervisorDetailAction === "removeVehicle" ? "เลือกรถที่จะนำออกจาก Active" : "เลือกรถเพื่อเพิ่มเข้า Active"} actionLabel={supervisorDetailAction === "removeVehicle" ? "เอาออก" : "เพิ่มรถ"} emptyLabel={supervisorDetailAction === "removeVehicle" ? "ไม่มีรถใน Active" : "ไม่มีรถพร้อมใช้ให้เพิ่ม"} />}
+      <ServerActiveSessionChat sessionId={selectedGuideSession.sessionId} module="supervisor" canSend={selectedGuideSession.status === "Active"} />
+      {notice && <p className="m3-notice">{notice}</p>}
+      {supervisorCompletionPrompt && isActiveCompletionPromptFor(supervisorCompletionPrompt, selectedGuideSession.sessionId) && (() => { const copy = activeCompletionCopy(supervisorCompletionPrompt.kind); return <div className="supervisor-modal-backdrop" role="presentation"><section className="supervisor-user-modal supervisor-completion-modal" role="dialog" aria-modal="true" aria-labelledby="supervisor-completion-title"><div className="supervisor-modal-heading"><div><p>{copy.eyebrow}</p><h3 id="supervisor-completion-title">{copy.title}</h3></div><button type="button" className="supervisor-modal-close" onClick={() => supervisorCompletionPrompt.kind === "expired" ? keepGuideSessionOpenAfterExpiry() : setSupervisorCompletionPrompt(null)} aria-label="ปิดหน้าต่างยืนยัน">×</button></div><p className="supervisor-completion-message">{copy.message}</p><div className="supervisor-modal-actions"><button type="button" className="supervisor-modal-cancel" onClick={() => supervisorCompletionPrompt.kind === "expired" ? keepGuideSessionOpenAfterExpiry() : setSupervisorCompletionPrompt(null)}>{copy.secondary}</button><button type="button" className="supervisor-modal-submit" onClick={completeGuideSessionFromSupervisor}><Check size={15} /> ยืนยัน</button></div></section></div>; })()}
+    </section>
+  </> : null;
   const createSupervisorStandby = (draft: SupervisorStandbyDraft) => {
     const sessionMembers = guideMembers.map(member => ({ id: member.id, name: member.name }));
     const duplicate = findSessionDraftDuplicates({ memberIds: draft.memberIds, vehicleIds: draft.vehicleIds }, sessionMembers);

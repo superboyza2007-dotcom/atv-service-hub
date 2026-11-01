@@ -1,4 +1,7 @@
 import { normalizeSessionExpiryBehavior, type TimerExpiryBehavior } from "@shared/supervisor-timer-settings";
+import type { SessionActivity } from "@/lib/session-activity-log";
+import type { SessionVehicleHistory } from "@/lib/session-vehicle-history";
+import type { SessionCompletionTiming } from "@/lib/session-completion-timing";
 
 export type SupervisorGuideStatus = "Standby" | "Active" | "TIME_EXPIRED" | "Completed";
 export type SupervisorGuideSession = {
@@ -7,6 +10,7 @@ export type SupervisorGuideSession = {
   durationMinutes: 30 | 60;
   vehicleIds: string[];
   memberIds: string[];
+  activeUserId?: string;
   activeUserName?: string;
   riderCount: number;
   passengerCount: number;
@@ -16,6 +20,9 @@ export type SupervisorGuideSession = {
   completedAt?: string;
   completedById?: string;
   completedByName?: string;
+  activityLog?: SessionActivity[];
+  vehicleHistory?: SessionVehicleHistory[];
+  completionTiming?: SessionCompletionTiming;
   overtimeAcknowledged?: boolean;
   timerEnabled?: boolean;
   expiryBehavior?: TimerExpiryBehavior;
@@ -43,6 +50,39 @@ function asStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+function normalizeSessionActivities(value: unknown): SessionActivity[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.flatMap(item => {
+    if (!isRecord(item) || typeof item.id !== "string" || typeof item.actorName !== "string" || typeof item.action !== "string" || typeof item.createdAt !== "string") return [];
+    return [{
+      id: item.id,
+      actorId: typeof item.actorId === "string" ? item.actorId : undefined,
+      actorName: item.actorName,
+      action: item.action,
+      detail: typeof item.detail === "string" ? item.detail : undefined,
+      createdAt: item.createdAt,
+    }];
+  });
+}
+
+function normalizeSessionVehicleHistory(value: unknown): SessionVehicleHistory[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.flatMap(item => {
+    if (!isRecord(item) || typeof item.vehicleId !== "string" || typeof item.number !== "string" || (item.cc !== "200" && item.cc !== "250") || typeof item.addedAt !== "string") return [];
+    return [{ vehicleId: item.vehicleId, number: item.number, cc: item.cc, addedAt: item.addedAt, removedAt: typeof item.removedAt === "string" ? item.removedAt : undefined }];
+  });
+}
+
+function normalizeSessionCompletionTiming(value: unknown): SessionCompletionTiming | undefined {
+  if (!isRecord(value) || ![value.plannedSeconds, value.actualSeconds, value.earlySeconds, value.overtimeSeconds].every(Number.isFinite)) return undefined;
+  return {
+    plannedSeconds: Number(value.plannedSeconds),
+    actualSeconds: Number(value.actualSeconds),
+    earlySeconds: Number(value.earlySeconds),
+    overtimeSeconds: Number(value.overtimeSeconds),
+  };
+}
+
 export function findSupervisorGuideSession(sessions: SupervisorGuideSession[], sessionId?: string) {
   return sessionId ? sessions.find(session => session.sessionId === sessionId) : undefined;
 }
@@ -59,6 +99,7 @@ export function normalizeSupervisorGuideSessions(value: unknown): SupervisorGuid
       durationMinutes,
       vehicleIds: asStringArray(item.vehicleIds),
       memberIds: asStringArray(item.memberIds),
+      activeUserId: typeof item.activeUserId === "string" ? item.activeUserId : undefined,
       activeUserName: typeof item.activeUserName === "string" ? item.activeUserName : undefined,
       riderCount: Number.isFinite(item.riderCount) ? Number(item.riderCount) : 0,
       passengerCount: Number.isFinite(item.passengerCount) ? Number(item.passengerCount) : 0,
@@ -68,6 +109,9 @@ export function normalizeSupervisorGuideSessions(value: unknown): SupervisorGuid
       completedAt: typeof item.completedAt === "string" ? item.completedAt : undefined,
       completedById: typeof item.completedById === "string" ? item.completedById : undefined,
       completedByName: typeof item.completedByName === "string" ? item.completedByName : undefined,
+      activityLog: normalizeSessionActivities(item.activityLog),
+      vehicleHistory: normalizeSessionVehicleHistory(item.vehicleHistory),
+      completionTiming: normalizeSessionCompletionTiming(item.completionTiming),
       overtimeAcknowledged: item.overtimeAcknowledged === true,
       timerEnabled: typeof item.timerEnabled === "boolean" ? item.timerEnabled : undefined,
       expiryBehavior: normalizeSessionExpiryBehavior(item.expiryBehavior),
