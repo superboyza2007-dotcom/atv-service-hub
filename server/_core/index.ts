@@ -13,8 +13,11 @@ import { cleanupLiveMessagesHandler } from "../scheduledCleanup";
 import { reconcileVehicleSessionsHandler } from "../scheduledVehicleReconcile";
 import { reconcileExpiredGuideSnapshotSessions } from "../guideSessionReconcile";
 import { reconcileExpiredVehicleSessions } from "../vehicleFlowService";
+import { exportMechanicRepairLogHandler } from "../scheduledMechanicRepairExport";
 import { ensureDailyRetentionCleanupSchedule } from "../dailyRetentionSchedule";
 import { ensureVehicleFlowReconciliationSchedule } from "../vehicleFlowSchedule";
+import { ensureMechanicRepairExportSchedule } from "../mechanicRepairExportSchedule";
+import { ensureDatabaseMigrations } from "../dbMigrations";
 import { publicPlatformScript } from "./publicConfig";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -57,6 +60,18 @@ function provisionDailyRetentionCleanupSchedule(attempt = 1) {
         const delayMs = Math.min(60_000, 5_000 * 2 ** (attempt - 1));
         setTimeout(() => provisionDailyRetentionCleanupSchedule(attempt + 1), delayMs);
       }
+  });
+}
+
+function provisionMechanicRepairExportSchedule(attempt = 1) {
+  void ensureMechanicRepairExportSchedule()
+    .then(({ taskUid, created }) => console.log(`[mechanic-repair-export] ${created ? "created" : "verified"} heartbeat task ${taskUid}`))
+    .catch(error => {
+      console.error(`[mechanic-repair-export] heartbeat provisioning attempt ${attempt} failed`, error);
+      if (attempt < 5) {
+        const delayMs = Math.min(60_000, 5_000 * 2 ** (attempt - 1));
+        setTimeout(() => provisionMechanicRepairExportSchedule(attempt + 1), delayMs);
+      }
     });
 }
 
@@ -75,7 +90,7 @@ async function reconcileExpiredSessionsInProcess() {
       reconcileExpiredVehicleSessions(),
       reconcileExpiredGuideSnapshotSessions(),
     ]);
-    if (vehicleResult.completedSessionCount || guideResult.expiredSessionCount) {
+    if (vehicleResult.expiredSessionCount || guideResult.expiredSessionCount) {
       console.log("[vehicle-session-reconcile] in-process expiry", {
         vehicle: vehicleResult,
         guide: guideResult,
@@ -94,6 +109,7 @@ function startInProcessReconciliationLoop() {
 }
 
 async function startServer() {
+  await ensureDatabaseMigrations();
   const app = express();
   const server = createServer(app);
   registerPttSignaling(server);
@@ -107,6 +123,7 @@ async function startServer() {
   });
   app.post("/api/scheduled/cleanup-live-messages", cleanupLiveMessagesHandler);
   app.post("/api/scheduled/reconcile-vehicle-sessions", reconcileVehicleSessionsHandler);
+  app.post("/api/scheduled/export-mechanic-repair-log", exportMechanicRepairLogHandler);
   app.get("/api/health", (_req, res) => {
     res.status(200).json({ status: "ok" });
   });
@@ -141,6 +158,7 @@ async function startServer() {
       provisionVehicleFlowReconciliationSchedule();
       provisionDailyRetentionCleanupSchedule();
       startInProcessReconciliationLoop();
+      provisionMechanicRepairExportSchedule();
     }
   });
 }

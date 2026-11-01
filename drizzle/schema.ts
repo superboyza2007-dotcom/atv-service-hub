@@ -152,7 +152,7 @@ export const vehicleSessionVehicles = mysqlTable("vehicleSessionVehicles", {
   vehicleLookup: index("vehicleSessionVehicles_vehicle_lookup").on(table.vehicleId),
 }));
 
-/** Immutable audit trail for every permitted vehicle-status transition. */
+/** Cycle-scoped audit trail; cleared when a vehicle is ready with no open repair, live session, or unread pickup notice. */
 export const vehicleStatusHistory = mysqlTable("vehicleStatusHistory", {
   id: int("id").autoincrement().primaryKey(),
   vehicleId: int("vehicleId").notNull().references(() => vehicles.id, { onDelete: "restrict" }),
@@ -312,6 +312,20 @@ export const vehicleFlowSchedules = mysqlTable("vehicleFlowSchedules", {
 }, table => ({
   jobKeyUnique: uniqueIndex("vehicleFlowSchedules_jobKey_unique").on(table.jobKey),
   taskUidLookup: index("vehicleFlowSchedules_task_uid_lookup").on(table.scheduleCronTaskUid),
+}));
+
+/** Durable identity and last-run marker for the daily mechanic repair-log export. */
+export const mechanicRepairExportSchedules = mysqlTable("mechanicRepairExportSchedules", {
+  id: int("id").autoincrement().primaryKey(),
+  jobKey: varchar("jobKey", { length: 64 }).notNull(),
+  scheduleCronTaskUid: varchar("scheduleCronTaskUid", { length: 65 }),
+  lastRunAt: timestamp("lastRunAt"),
+  isEnabled: int("isEnabled").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  jobKeyUnique: uniqueIndex("mechanicRepairExportSchedules_jobKey_unique").on(table.jobKey),
+  taskUidLookup: index("mechanicRepairExportSchedules_task_uid_lookup").on(table.scheduleCronTaskUid),
 }));
 
 export type User = typeof users.$inferSelect;

@@ -23,10 +23,11 @@ import {
 } from "./vehicleFlowService";
 import { completeNextActiveQueue, reconcileActiveQueue } from "./activeQueueMirror";
 import { getActiveQueueBridgeSnapshot } from "./activeSourceBridge";
-import { buildRepairLogSheetPayload, getRepairLogScriptUrl, isRepairLogSheetConfigured, parseAllowedAppsScriptUrl, REPAIR_LOG_SETTINGS_SNAPSHOT_KEY, submitRepairLogSheetPayload } from "./repairLogGoogleSheets";
+import { getRepairLogScriptUrl, isRepairLogSheetConfigured, parseAllowedAppsScriptUrl, REPAIR_LOG_SETTINGS_SNAPSHOT_KEY } from "./repairLogGoogleSheets";
 import { cancelFutureDiceSession, chooseFutureDiceOutcome, createFutureDiceSession, getFutureDiceInvitationForUser, getFutureDiceSession, isFutureDiceRuleError, listFutureDiceSessions, rollFutureDice, setFutureDiceOutcomeType, type FutureDiceActor } from "./futureDiceService";
 import { createRepairWorkflowItem, completeRepairWorkflowItem, listRepairWorkflowItems, transitionRepairWorkflowItem, REPAIR_WORKFLOW_STATUSES } from "./repairWorkflowService";
-import { archiveMechanicRepairRecord, createMechanicRepairRecord, listMechanicRepairRecords, listPendingMechanicRepairRecords, markMechanicRepairRecordsExported, updateMechanicRepairRecord } from "./mechanicRepairService";
+import { archiveMechanicRepairRecord, createMechanicRepairRecord, listMechanicRepairRecords, updateMechanicRepairRecord } from "./mechanicRepairService";
+import { exportPendingMechanicRepairRecords } from "./repairLogExportService";
 import { normalizeSupervisorTimerSettings, SUPERVISOR_TIMER_SETTINGS_SNAPSHOT_KEY } from "../shared/supervisor-timer-settings";
 
 const vehicleActor = (user: { id: number; role: "user" | "guide" | "mechanic" | "supervisor" | "admin" }) => ({
@@ -153,21 +154,17 @@ export const appRouter = router({
       if (!ctx.appSpecialAccess && ctx.user?.role !== "admin" && ctx.user?.role !== "mechanic" && ctx.user?.role !== "supervisor" && !group.includes("ช่าง") && !group.includes("หัวหน้า")) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Mechanic or supervisor permission required" });
       }
-      const pending = await listPendingMechanicRepairRecords();
-      if (!pending.length) return { count: 0, sentAt: new Date().toISOString() };
       const scriptUrl = await getRepairLogScriptUrl();
       if (!isRepairLogSheetConfigured(scriptUrl)) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Google Sheets repair-log integration is not configured" });
       }
       try {
-        await submitRepairLogSheetPayload(buildRepairLogSheetPayload(pending), scriptUrl);
+        const result = await exportPendingMechanicRepairRecords();
+        return { count: result.sentCount, deletedCount: result.deletedCount, sentAt: result.sentAt };
       } catch {
-        console.error("[RepairLog] Server-side Google Sheets submission failed");
-        throw new TRPCError({ code: "BAD_GATEWAY", message: "Google Sheets could not confirm the repair-log export" });
+        console.error("[RepairLog] Server-side Google Sheets submission or post-send cleanup failed");
+        throw new TRPCError({ code: "BAD_GATEWAY", message: "Google Sheets could not confirm the repair-log export; database rows were kept" });
       }
-      const sentAt = new Date();
-      await markMechanicRepairRecordsExported(pending.map(record => record.id), sentAt);
-      return { count: pending.length, sentAt: sentAt.toISOString() };
     }),
   }),
   futureDice: router({

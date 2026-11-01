@@ -26,6 +26,35 @@ describe("supervisor guide operations", () => {
     expect(findSupervisorGuideSession(sessions, "missing")).toBeUndefined();
   });
 
+  it("preserves activity, vehicle history, and completion timing for Guide-equivalent details", () => {
+    const session = normalizeSupervisorGuideSessions([{
+      sessionId: "COMPLETED-DETAIL",
+      status: "Completed",
+      durationMinutes: 30,
+      vehicleIds: ["m3-v61"],
+      memberIds: ["1"],
+      activeUserId: "1",
+      activeUserName: "ไกด์เอ",
+      riderCount: 2,
+      passengerCount: 1,
+      createdAt: "2026-08-26T01:00:00.000Z",
+      startedAt: "2026-08-26T01:05:00.000Z",
+      completedAt: "2026-08-26T01:35:00.000Z",
+      completedByName: "หัวหน้าบี",
+      activityLog: [{ id: "activity-1", actorName: "ไกด์เอ", action: "เริ่มงาน → Active", createdAt: "2026-08-26T01:05:00.000Z" }],
+      vehicleHistory: [{ vehicleId: "m3-v61", number: "61", cc: "200", addedAt: "2026-08-26T01:00:00.000Z" }],
+      completionTiming: { plannedSeconds: 1800, actualSeconds: 1800, earlySeconds: 0, overtimeSeconds: 0 },
+    }])[0];
+
+    expect(session).toMatchObject({
+      activeUserId: "1",
+      completedByName: "หัวหน้าบี",
+      activityLog: [{ id: "activity-1", action: "เริ่มงาน → Active" }],
+      vehicleHistory: [{ vehicleId: "m3-v61", number: "61", cc: "200" }],
+      completionTiming: { plannedSeconds: 1800, actualSeconds: 1800 },
+    });
+  });
+
   it("aggregates every vehicle across groups while keeping safety notices informational", () => {
     const vehicles = [
       { number: "1", cc: "200" as const, status: "ready" as const },

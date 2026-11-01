@@ -1,6 +1,6 @@
 export type VehicleSafetyNotice = {
   id: string;
-  source?: "manual" | "waiting-available";
+  source?: "manual" | "guide" | "waiting-available";
   sourceRepairReportId?: string;
   vehicleNumber: number;
   description: string;
