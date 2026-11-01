@@ -86,7 +86,10 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
-    if (process.env.NODE_ENV === "production") provisionVehicleFlowReconciliationSchedule();
+    // Managed WebDev production serves the compiled app without always setting
+    // NODE_ENV explicitly. Only skip provisioning for the Vite development
+    // server; every deployed/static runtime needs the expiry heartbeat.
+    if (process.env.NODE_ENV !== "development") provisionVehicleFlowReconciliationSchedule();
   });
 }
 
