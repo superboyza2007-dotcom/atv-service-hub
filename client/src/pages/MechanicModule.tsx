@@ -430,6 +430,14 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
       cards: guideRepairRows.filter(report => repairBoardStages[report.id] === "รออะไหล่ใช้งานได้").map(report => ({ id: report.id, vehicleNumber: report.vehicleNumber, title: `รถ #${report.vehicleNumber}`, detail: repairBoardOutcomeDetails[report.id] || report.description, meta: `${report.reporter} · ${formatThaiDate(report.createdAt)}`, kind: "report" as const, report })),
     },
   ];
+  const preDueMaintenanceGroups = (["200", "250"] as const).map(cc => ({
+    cc,
+    rows: maintenanceTableGroups
+      .filter(group => group.cc === cc)
+      .flatMap(group => group.rows)
+      .filter(row => row.thresholdHours > 0 && row.progress >= 85 && row.progress < 100)
+      .sort((left, right) => right.progress - left.progress),
+  }));
   const alertRecords: AlertRecord[] = safetyNotices.filter(notice => notice.source !== "waiting-available").map(notice => ({ ...notice }));
   const editingAlert = editingAlertId ? localState.alerts.find(alert => alert.id === editingAlertId) : undefined;
   const showWaitingPartsColumns = Boolean(repairBoardPendingAlertId) || alertRecords.some(alert => alert.source === "waiting-available") || editingAlert?.source === "waiting-available";
@@ -990,6 +998,15 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
       <DisconnectedVehicleStatusCards vehicles={vehicles} safetyNotices={safetyNotices} statusModel={supervisorStatusModel} onOpenGroupView={() => setTab("status")} />
       <div className="m3-dashboard-actions"><button className="m3-primary" onClick={() => setTab("tips")}><AlertTriangle size={16} /> เพิ่มรายการเตือน</button><button className="m3-secondary" onClick={() => setTab("repair")}><ClipboardPlus size={16} /> ทำรายการแจ้งซ่อม</button></div>
       {repairBoardPanel}
+      <section className="mechanic-pre-due-board" aria-label="รถใกล้ถึงรอบเปลี่ยน">
+        <div className="mechanic-pre-due-heading"><div><span>MAINTENANCE STRUCTURE / 85% ALERT</span><h3>โครงสร้างรถใกล้ถึงรอบเปลี่ยน</h3><small>แสดงเฉพาะรถที่สะสมถึง 85% แต่ยังไม่ถึงกำหนดแจ้งเตือน</small></div><RotateCcw size={24} /></div>
+        <div className="mechanic-pre-due-columns">
+          {preDueMaintenanceGroups.map(group => <section className="mechanic-pre-due-column" key={group.cc} aria-labelledby={`mechanic-pre-due-${group.cc}`}>
+            <header><h4 id={`mechanic-pre-due-${group.cc}`}>{group.cc} cc</h4><b>{group.rows.length}</b></header>
+            <div className="mechanic-pre-due-list">{group.rows.length ? group.rows.map(row => <article key={row.number} className="mechanic-pre-due-card"><div><strong>รถ #{row.number}</strong><span>{vehicleResponsibilityMeta(row.number).groupLabel}</span><small>{vehicleResponsibilityMeta(row.number).managerLabel}</small></div><div className="mechanic-pre-due-progress"><b>{row.accumulatedHours.toFixed(1)} / {row.thresholdHours.toFixed(1)} ชม.</b><span><i style={{ width: `${Math.min(100, row.progress)}%` }} /></span><em>{row.progress.toFixed(0)}%</em></div></article>) : <p className="mechanic-pre-due-empty">ยังไม่มีรถถึง 85%</p>}</div>
+          </section>)}
+        </div>
+      </section>
       <section className="mechanic-active-section mechanic-active-section-secondary" aria-labelledby="mechanic-active-section-title"><div className="m3-list-heading"><div><p>ACTIVE SECTION / LIVE</p><h3 id="mechanic-active-section-title">รายการ Section ที่กำลัง Active</h3></div><span>{guideSessions.filter(session => session.status === "Active").length} รายการ</span></div><div className="mechanic-active-section-grid">{guideSessions.filter(session => session.status === "Active").map(session => { const startedAt = session.startedAt ? Date.parse(session.startedAt) : Number.NaN; const elapsed = Number.isFinite(startedAt) ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0; const duration = Math.max(0, (session.durationMinutes ?? 30) * 60); const over = Math.max(0, elapsed - duration); const remain = Math.max(0, duration - elapsed); const label = over > 0 ? `+${String(Math.floor(over / 60)).padStart(2, "0")}:${String(over % 60).padStart(2, "0")}` : `${String(Math.floor(remain / 60)).padStart(2, "0")}:${String(remain % 60).padStart(2, "0")}`; return <button type="button" className={`mechanic-active-section-card ${over > 0 ? "is-overtime" : ""}`} key={session.sessionId} onClick={() => setSelectedMechanicFollowSessionId(session.sessionId)}><div><span>{session.activeUserName || "ไม่ระบุผู้ทำรายการ"}</span><strong>{over > 0 ? "เวลาบวก" : "กำลังทำงาน"} {label}</strong></div><small>สมาชิก {(session.memberIds ?? []).length} คน · รถ {(session.vehicleIds ?? []).length} คัน</small><em>{session.sessionId}</em></button>; })}{!guideSessions.some(session => session.status === "Active") && <p className="m3-empty">ยังไม่มีรายการ Section ที่กำลัง Active</p>}</div></section></>}
     </section>
       <footer className="m3-footer"><a href="/">กลับระบบหลัก</a><span>Module ช่าง · ใช้สถานะรถร่วมกับโมดูลไกด์</span></footer>
