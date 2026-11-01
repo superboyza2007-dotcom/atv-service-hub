@@ -152,7 +152,7 @@ export const vehicleSessionVehicles = mysqlTable("vehicleSessionVehicles", {
   vehicleLookup: index("vehicleSessionVehicles_vehicle_lookup").on(table.vehicleId),
 }));
 
-/** Immutable audit trail for every permitted vehicle-status transition. */
+/** Cycle-scoped audit trail; cleared when a vehicle is ready with no open repair, live session, or unread pickup notice. */
 export const vehicleStatusHistory = mysqlTable("vehicleStatusHistory", {
   id: int("id").autoincrement().primaryKey(),
   vehicleId: int("vehicleId").notNull().references(() => vehicles.id, { onDelete: "restrict" }),

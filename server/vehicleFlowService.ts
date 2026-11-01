@@ -13,6 +13,7 @@ import {
 } from "../drizzle/schema";
 import { getDb } from "./db";
 import { getSupervisorTimerSettings } from "./supervisorTimerSettings";
+import { shouldClearVehicleStatusHistory } from "./vehicleStatusHistoryRetention";
 import {
   assertVehicleTransition,
   type AppRole,
@@ -67,9 +68,42 @@ async function getMembershipRole(userId: number, groupId: number): Promise<Fleet
   return rows[0]?.memberRole ?? null;
 }
 
+async function clearVehicleStatusHistoryIfCycleComplete(db: Awaited<ReturnType<typeof requireDatabase>>, vehicleId: number) {
+  const currentVehicle = (await db.select({ status: vehicles.status }).from(vehicles).where(eq(vehicles.id, vehicleId)).limit(1))[0];
+
+  const openRepairs = await db.select({ id: repairJobs.id }).from(repairJobs).where(and(
+    eq(repairJobs.vehicleId, vehicleId),
+    inArray(repairJobs.status, ["open", "in_progress"]),
+  )).limit(1);
+
+  const liveSessions = await db.select({ id: vehicleSessions.id })
+    .from(vehicleSessionVehicles)
+    .innerJoin(vehicleSessions, eq(vehicleSessionVehicles.sessionId, vehicleSessions.id))
+    .where(and(
+      eq(vehicleSessionVehicles.vehicleId, vehicleId),
+      inArray(vehicleSessions.status, ["standby", "active"]),
+    ))
+    .limit(1);
+
+  const unreadPickupNotifications = await db.select({ id: vehicleNotifications.id }).from(vehicleNotifications).where(and(
+    eq(vehicleNotifications.vehicleId, vehicleId),
+    eq(vehicleNotifications.type, "pickup_ready"),
+    isNull(vehicleNotifications.readAt),
+  )).limit(1);
+  if (!shouldClearVehicleStatusHistory({
+    vehicleStatus: currentVehicle?.status,
+    hasOpenRepair: openRepairs.length > 0,
+    hasLiveSession: liveSessions.length > 0,
+    hasUnreadPickupNotification: unreadPickupNotifications.length > 0,
+  })) return;
+
+  await db.delete(vehicleStatusHistory).where(eq(vehicleStatusHistory.vehicleId, vehicleId));
+}
+
 async function appendStatusHistory(input: {
+  db: Awaited<ReturnType<typeof requireDatabase>>;
   vehicleId: number;
-  fromStatus: VehicleStatus | null;
+  fromStatus: VehicleStatus;
   toStatus: VehicleStatus;
   eventType: VehicleFlowEvent;
   actorUserId: number | null;
@@ -77,8 +111,7 @@ async function appendStatusHistory(input: {
   sessionId?: number;
   note?: string;
 }) {
-  const db = await requireDatabase();
-  await db.insert(vehicleStatusHistory).values({
+  await input.db.insert(vehicleStatusHistory).values({
     vehicleId: input.vehicleId,
     fromStatus: input.fromStatus,
     toStatus: input.toStatus,
@@ -100,7 +133,10 @@ async function updateVehicleStatus(input: {
   sessionId?: number;
 }) {
   const { db, vehicle } = await getVehicleContext(input.vehicleId);
-  if (vehicle.status === input.toStatus) return vehicle;
+  if (vehicle.status === input.toStatus) {
+    if (input.toStatus === "ready") await clearVehicleStatusHistoryIfCycleComplete(db, input.vehicleId);
+    return vehicle;
+  }
 
   if (input.actor) {
     const membershipRole = await getMembershipRole(input.actor.id, vehicle.groupId);
@@ -123,6 +159,7 @@ async function updateVehicleStatus(input: {
 
   await db.update(vehicles).set({ status: input.toStatus }).where(eq(vehicles.id, input.vehicleId));
   await appendStatusHistory({
+    db,
     vehicleId: input.vehicleId,
     fromStatus: vehicle.status,
     toStatus: input.toStatus,
@@ -132,6 +169,7 @@ async function updateVehicleStatus(input: {
     sessionId: input.sessionId,
     note: input.note,
   });
+  if (input.toStatus === "ready") await clearVehicleStatusHistoryIfCycleComplete(db, input.vehicleId);
   return { ...vehicle, status: input.toStatus };
 }
 
@@ -261,9 +299,9 @@ export async function receivePickupVehicle(input: { vehicleId: number; actor: Ve
   });
   await db.update(vehicleNotifications).set({ readAt: new Date() }).where(and(
     eq(vehicleNotifications.vehicleId, input.vehicleId),
-    eq(vehicleNotifications.recipientUserId, input.actor.id),
     eq(vehicleNotifications.type, "pickup_ready"),
   ));
+  await clearVehicleStatusHistoryIfCycleComplete(db, input.vehicleId);
 }
 
 export async function createVehicleSession(input: {
@@ -337,6 +375,10 @@ export async function cancelVehicleSession(input: { sessionId: number; actor: Ve
     });
     returnedVehicleCount += 1;
   }
+  await db.delete(vehicleSessions).where(and(
+    eq(vehicleSessions.id, session.id),
+    eq(vehicleSessions.status, "cancelled"),
+  ));
   return { returnedVehicleCount };
 }
 
@@ -370,6 +412,10 @@ export async function completeVehicleSession(input: { sessionId: number; actor: 
     });
     returnedVehicleCount += 1;
   }
+  await db.delete(vehicleSessions).where(and(
+    eq(vehicleSessions.id, session.id),
+    eq(vehicleSessions.status, "completed"),
+  ));
   return { returnedVehicleCount };
 }
 
