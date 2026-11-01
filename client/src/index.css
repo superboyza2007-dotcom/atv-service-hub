@@ -10208,6 +10208,7 @@ button:active {
 .supervisor-session-summary > div { display: grid; gap: 6px; padding: 16px; border: 1px solid rgba(117, 242, 177, .22); border-radius: 16px; background: rgba(10, 37, 32, .66); }
 .supervisor-session-summary span { color: rgba(218, 242, 230, .62); font-size: .84rem; }
 .supervisor-session-summary strong { color: #eafff1; font-size: 1.05rem; line-height: 1.45; }
+.supervisor-completed-summary-hidden { display: none; }
 .supervisor-session-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
 .supervisor-session-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 @media (max-width: 640px) {
