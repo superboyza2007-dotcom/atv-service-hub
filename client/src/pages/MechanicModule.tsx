@@ -430,14 +430,6 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
       cards: guideRepairRows.filter(report => repairBoardStages[report.id] === "รออะไหล่ใช้งานได้").map(report => ({ id: report.id, vehicleNumber: report.vehicleNumber, title: `รถ #${report.vehicleNumber}`, detail: repairBoardOutcomeDetails[report.id] || report.description, meta: `${report.reporter} · ${formatThaiDate(report.createdAt)}`, kind: "report" as const, report })),
     },
   ];
-  const preDueMaintenanceGroups = (["200", "250"] as const).map(cc => ({
-    cc,
-    rows: maintenanceTableGroups
-      .filter(group => group.cc === cc)
-      .flatMap(group => group.rows)
-      .filter(row => row.thresholdHours > 0 && row.progress >= 85 && row.progress < 100)
-      .sort((left, right) => right.progress - left.progress),
-  }));
   const alertRecords: AlertRecord[] = safetyNotices.filter(notice => notice.source !== "waiting-available").map(notice => ({ ...notice }));
   const editingAlert = editingAlertId ? localState.alerts.find(alert => alert.id === editingAlertId) : undefined;
   const showWaitingPartsColumns = Boolean(repairBoardPendingAlertId) || alertRecords.some(alert => alert.source === "waiting-available") || editingAlert?.source === "waiting-available";
@@ -538,6 +530,15 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
       return { number, status: getMechanicVehicleStatus(group, number), accumulatedHours, thresholdHours, progress, level: getMaintenanceMeterLevel(progress) };
     }),
   })), [activeMaintenanceRule, maintenanceUsageHours, vehicleState]);
+
+  const preDueMaintenanceGroups = (["200", "250"] as const).map(cc => ({
+    cc,
+    rows: maintenanceTableGroups
+      .filter(group => group.cc === cc)
+      .flatMap(group => group.rows)
+      .filter(row => row.thresholdHours > 0 && row.progress >= 85 && row.progress < 100)
+      .sort((left, right) => right.progress - left.progress),
+  }));
   const dueMaintenanceAlerts = maintenanceAlerts.filter(alert => alert.due);
   useEffect(() => {
     if (!mechanicStateQuery.isSuccess || !supervisorFleetSnapshotQuery.isSuccess) return;
