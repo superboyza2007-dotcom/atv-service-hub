@@ -314,6 +314,8 @@ export function reconcileFleetSnapshotFromMechanicState(
 export async function mergeAppOperationsSnapshot(snapshotKey: string, patchPayload: string): Promise<string> {
   const current = parseSnapshotRecord(await getAppOperationsSnapshot(snapshotKey));
   const patch = parseSnapshotRecord(patchPayload);
+  // Mechanic repair records are canonical in mechanicRepairRecords; a stale browser snapshot must not replace them.
+  if (snapshotKey === "atv-mechanic-state-v1") delete patch.repairs;
   const merged = JSON.stringify(mergeGuideRepairSnapshotPayload(snapshotKey, current, patch));
   await upsertAppOperationsSnapshot(snapshotKey, merged);
   if (snapshotKey === "atv-mechanic-state-v1" && Array.isArray(patch.repairs)) {

@@ -1,6 +1,6 @@
 # ATV Service Hub — Server, API และ Data Flow
 
-เอกสารนี้อธิบายโค้ดรุ่นปัจจุบันของ ATV Service Hub ณ commit `f2b96fb` โดยอ้างอิงจาก source code ใน repository ไม่ใช่คำอธิบายเชิงสมมติ เอกสารนี้ตั้งใจใช้เป็นคู่มือสำหรับดูแลระบบ ย้ายเซิร์ฟเวอร์ ตรวจปัญหา และพัฒนาต่อ
+เอกสารนี้อธิบายโค้ดปัจจุบันของ ATV Service Hub โดยอ้างอิงจาก source code ใน repository ไม่ใช่คำอธิบายเชิงสมมติ เอกสารนี้ตั้งใจใช้เป็นคู่มือสำหรับดูแลระบบ ย้ายเซิร์ฟเวอร์ ตรวจปัญหา และพัฒนาต่อ
 
 ## 1. ภาพรวมระบบ
 
@@ -17,6 +17,7 @@ tRPC Router (server/routers.ts)
         │
         ├── Authentication / App Directory Session
         ├── Vehicle Flow Service
+        ├── Mechanic Repair Records Service
         ├── Active Queue / 2.3 Bridge
         ├── Future Dice Service
         ├── Live Messages / Operational History
@@ -73,6 +74,7 @@ API ธุรกิจทั้งหมดอยู่ใต้ router หล�
 system
  directory
  repairLog
+ mechanicRepairs
  futureDice
  liveMessages
  operationalHistory
@@ -185,9 +187,9 @@ Bridge ทำหน้าที่:
 | Endpoint | ชนิด | หน้าที่ |
 |---|---|---|
 | `get` | query | อ่าน JSON payload ของ snapshot key |
-| `save` | mutation | เขียน snapshot ทั้ง payload |
-| `merge` | mutation | merge เฉพาะ field ที่ส่งมา และรักษาข้อมูล repair/chat ที่เป็น terminal ตามกฎใน db layer |
-| `append` | mutation | append item เข้า array field พร้อม deduplicate ตาม id และจำกัดจำนวน |
+| `save` | mutation | เขียน snapshot ทั้ง payload; สำหรับ mechanic-state จะ merge แทนและไม่รับ `repairs` |
+| `merge` | mutation | merge เฉพาะ field ที่ส่งมา; ไม่รับ `repairs` ใน mechanic-state และรักษาข้อมูล terminal ตามกฎใน db layer |
+| `append` | mutation | append item เข้า array field พร้อม deduplicate ตาม id และจำกัดจำนวน; ปฏิเสธ field `repairs` ของ mechanic-state |
 
 Snapshot เหมาะกับ state ของโมดูลที่มี schema ฝั่ง client แต่ต้องแชร์ผ่าน server เช่น Guide state, Mechanic state, Fleet state และ queue state
 
@@ -200,9 +202,20 @@ Snapshot เหมาะกับ state ของโมดูลที่มี 
 | Endpoint | ชนิด | หน้าที่ |
 |---|---|---|
 | `repairLog.status` | query | ตรวจว่า Google Apps Script endpoint ถูกตั้งค่าและผ่าน allowlist หรือไม่ |
-| `repairLog.submit` | mutation | ตรวจ schema 13 columns แล้วส่ง repair log ไป Google Apps Script |
+| `repairLog.export` | mutation | Backend ดึงรายการที่ยังไม่ส่งจากฐานข้อมูล ส่งตาม schema 13 columns และประทับ `exportedAt` เมื่อสำเร็จ โดยเก็บประวัติไว้ |
 
 การเชื่อมต่อภายนอกยอมรับเฉพาะ HTTPS `script.google.com/macros/s/.../exec` และ redirect ที่ปลอดภัยไป `script.googleusercontent.com/macros/...` เท่านั้น มี timeout 15 วินาที และตรวจ response `{ ok: true }`
+
+### 4.10 `mechanicRepairs`
+
+| Endpoint | ชนิด | หน้าที่ |
+|---|---|---|
+| `mechanicRepairs.list` | query | อ่านรายการซ่อมที่ยังไม่ archive จากฐานข้อมูลกลาง พร้อมสถานะส่งออก |
+| `mechanicRepairs.create` | mutation | สร้าง repair record ใหม่โดย server เป็นผู้กำหนดเวลาและผู้ทำรายการ |
+| `mechanicRepairs.update` | mutation | แก้ไข record ตาม ID ผ่าน Backend |
+| `mechanicRepairs.archive` | mutation | ซ่อนรายการจากหน้าประวัติโดยเก็บข้อมูลในฐานข้อมูล |
+
+`mechanicRepairService.ts` ย้ายข้อมูล legacy จาก snapshot แบบ idempotent เพียงครั้งเดียว และใช้ตาราง `mechanicRepairRecords` เป็น canonical source of truth การเขียน snapshot ทั่วไปไม่สามารถเขียนทับ array `repairs` ได้
 
 ## 5. Backend service และส่วนคำนวณ
 
@@ -222,6 +235,10 @@ Snapshot เหมาะกับ state ของโมดูลที่มี 
 - สร้าง notification ให้ guide ในกลุ่มรถ
 - ผูก vehicle กับ session
 - คืนรถเมื่อจบหรือยกเลิก session
+
+### 5.2.1 `mechanicRepairService.ts`
+
+เป็น service สำหรับรายการซ่อมของโมดูลช่าง อ่าน/สร้าง/แก้ไข/archive record โดยตรงใน MySQL; การ import snapshot เก่าป้องกันข้อมูลซ้ำด้วย ID และ marker ใน snapshot ส่วน Google Sheets export สร้าง payload จาก record ที่อ่านจากฐานข้อมูลฝั่ง server เท่านั้น
 
 ### 5.3 `activeQueueAdapter.ts` และ `activeQueueMirror.ts`
 
@@ -276,6 +293,7 @@ Adapter แปลง active session เป็น queue snapshot ที่ UI ใ
 - `vehicleGroupMembers` — สิทธิ์ guide/mechanic ในกลุ่ม
 - `vehicles` — source of truth ของรถและสถานะปัจจุบัน
 - `repairJobs` — งานซ่อม
+- `mechanicRepairRecords` — รายการซ่อมของช่าง ประวัติส่งออกและสถานะ archive
 - `vehicleNotifications` — แจ้งเตือนรับรถ
 - `vehicleStatusHistory` — audit ของ transition รถ
 
@@ -298,7 +316,7 @@ Adapter แปลง active session เป็น queue snapshot ที่ UI ใ
 - `appMessageCleanupJobs` — metadata งาน cleanup live message
 - `vehicleFlowSchedules` — metadata งาน reconcile session หมดอายุ
 
-Migration ที่เกี่ยวข้องกับรุ่นปัจจุบันอยู่ใน `drizzle/0000_*.sql` ถึง `drizzle/0004_dice_mini_integration.sql`
+Migration ที่เกี่ยวข้องกับรุ่นปัจจุบันอยู่ใน `drizzle/0000_*.sql` ถึง `drizzle/0006_mechanic_repair_records.sql` ต้อง apply migration `0006` กับฐานข้อมูลเป้าหมายก่อน deploy รุ่นนี้
 
 ## 7. การไหลข้อมูลสำคัญ
 
@@ -335,6 +353,18 @@ Guide receivePickup
   → vehicle pickup → ready
   → mark notification read
   → vehicleStatusHistory
+```
+
+### 7.2.1 ประวัติซ่อมของโมดูลช่าง
+
+```text
+Mechanic UI
+  → mechanicRepairs.list/create/update/archive
+  → mechanicRepairService
+  → mechanicRepairRecords (MySQL)
+  → repairLog.export อ่านรายการ pending จาก MySQL
+  → Google Apps Script
+  → ประทับ exportedAt; เก็บ record ไว้ในประวัติ ไม่ลบจากฐานข้อมูล
 ```
 
 ### 7.3 สร้างและจบ session รถ

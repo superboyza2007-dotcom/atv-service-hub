@@ -1,6 +1,7 @@
 import { SPECIAL_ACCESS_NAME } from "@shared/const";
 
 export type AppModule = "guide" | "mechanic" | "supervisor";
+export type AppAccessTarget = AppModule | "mechanicTips";
 
 export type AppIdentity = {
   memberId?: number;
@@ -42,6 +43,6 @@ export function resolveAppActor(
   return fallback ?? { name: "ผู้ใช้งานปัจจุบัน" };
 }
 
-export function canOpenModule(identity: AppIdentity, requested: AppModule): boolean {
-  return identity.special || identity.module === requested;
+export function canOpenModule(identity: AppIdentity, requested: AppAccessTarget): boolean {
+  return identity.special || identity.module === requested || (requested === "mechanicTips" && identity.module === "guide");
 }

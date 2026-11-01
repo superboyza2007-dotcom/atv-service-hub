@@ -43,6 +43,13 @@
       "when": 1793113200000,
       "tag": "0005_supervisor_timer_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1793419820419,
+      "tag": "0006_mechanic_repair_records",
+      "breakpoints": true
     }
   ]
 }

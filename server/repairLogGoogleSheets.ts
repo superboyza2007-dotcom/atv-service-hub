@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { ENV } from "./_core/env";
+import { getAppOperationsSnapshot } from "./db";
+
+export const REPAIR_LOG_SETTINGS_SNAPSHOT_KEY = "atv-repair-log-settings-v1";
 
 export const REPAIR_LOG_SHEET_COLUMNS = [
   "รหัสรายการ",
@@ -34,6 +37,50 @@ export const repairLogPayloadSchema = z.object({
 
 export type RepairLogPayload = z.infer<typeof repairLogPayloadSchema>;
 
+type RepairLogSourceRecord = {
+  id: string;
+  vehicleNumber: number;
+  symptom: string;
+  parts: string;
+  technician: string;
+  decision?: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  sourceGuideRepairId?: string | null;
+  accumulatedHoursAtRepair?: number | null;
+};
+
+function elapsedRepairHours(start: string, end: string): string {
+  const elapsed = Math.max(0, new Date(end).getTime() - new Date(start).getTime());
+  return `${(elapsed / 3_600_000).toFixed(1)} ชม.`;
+}
+
+/** Build the export only from records read by the server from its canonical database. */
+export function buildRepairLogSheetPayload(records: RepairLogSourceRecord[], sentAt = new Date()): RepairLogPayload {
+  return repairLogPayloadSchema.parse({
+    source: "guide-module-dashboard",
+    sheetName: "RepairLog",
+    columns: [...REPAIR_LOG_SHEET_COLUMNS],
+    rows: records.map(record => [
+      record.id,
+      record.createdAt,
+      record.updatedAt,
+      elapsedRepairHours(record.createdAt, record.updatedAt),
+      record.vehicleNumber,
+      record.symptom,
+      record.parts,
+      record.technician,
+      typeof record.accumulatedHoursAtRepair === "number" ? record.accumulatedHoursAtRepair : "",
+      record.status,
+      record.decision ?? "",
+      record.sourceGuideRepairId ?? "",
+      "รายการซ่อม",
+    ]),
+    sentAt: sentAt.toISOString(),
+  });
+}
+
 export function parseAllowedAppsScriptUrl(rawValue: string): URL | null {
   try {
     const url = new URL(rawValue.trim());
@@ -58,6 +105,19 @@ export function isRepairLogSheetConfigured(rawValue = ENV.repairLogScriptUrl): b
   return parseAllowedAppsScriptUrl(rawValue) !== null;
 }
 
+export async function getRepairLogScriptUrl(): Promise<string> {
+  const payload = await getAppOperationsSnapshot(REPAIR_LOG_SETTINGS_SNAPSHOT_KEY);
+  if (payload) {
+    try {
+      const value = JSON.parse(payload) as { scriptUrl?: unknown };
+      if (typeof value.scriptUrl === "string" && isRepairLogSheetConfigured(value.scriptUrl)) return value.scriptUrl.trim();
+    } catch {
+      // Fall back to the environment setting when the saved setting is invalid.
+    }
+  }
+  return isRepairLogSheetConfigured(ENV.repairLogScriptUrl) ? ENV.repairLogScriptUrl.trim() : "";
+}
+
 function parseAllowedGoogleRedirect(location: string, baseUrl: URL): URL | null {
   try {
     const url = new URL(location, baseUrl);
@@ -80,7 +140,7 @@ function parseAllowedGoogleRedirect(location: string, baseUrl: URL): URL | null 
 
 export async function submitRepairLogSheetPayload(
   payload: RepairLogPayload,
-  rawUrl = ENV.repairLogScriptUrl,
+  rawUrl: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ ok: true }> {
   const endpoint = parseAllowedAppsScriptUrl(rawUrl);

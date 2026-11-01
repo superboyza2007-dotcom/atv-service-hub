@@ -11,6 +11,7 @@ import { serveStatic, setupVite } from "./vite";
 import { registerPttSignaling } from "../ptt-signaling";
 import { cleanupLiveMessagesHandler } from "../scheduledCleanup";
 import { reconcileVehicleSessionsHandler } from "../scheduledVehicleReconcile";
+import { ensureDailyRetentionCleanupSchedule } from "../dailyRetentionSchedule";
 import { ensureVehicleFlowReconciliationSchedule } from "../vehicleFlowSchedule";
 import { publicPlatformScript } from "./publicConfig";
 
@@ -41,6 +42,18 @@ function provisionVehicleFlowReconciliationSchedule(attempt = 1) {
       if (attempt < 5) {
         const delayMs = Math.min(60_000, 5_000 * 2 ** (attempt - 1));
         setTimeout(() => provisionVehicleFlowReconciliationSchedule(attempt + 1), delayMs);
+      }
+    });
+}
+
+function provisionDailyRetentionCleanupSchedule(attempt = 1) {
+  void ensureDailyRetentionCleanupSchedule()
+    .then(({ taskUid, created }) => console.log(`[daily-retention-cleanup] ${created ? "created" : "verified"} heartbeat task ${taskUid}`))
+    .catch(error => {
+      console.error(`[daily-retention-cleanup] heartbeat provisioning attempt ${attempt} failed`, error);
+      if (attempt < 5) {
+        const delayMs = Math.min(60_000, 5_000 * 2 ** (attempt - 1));
+        setTimeout(() => provisionDailyRetentionCleanupSchedule(attempt + 1), delayMs);
       }
     });
 }
@@ -88,8 +101,11 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
     // Managed WebDev production serves the compiled app without always setting
     // NODE_ENV explicitly. Only skip provisioning for the Vite development
-    // server; every deployed/static runtime needs the expiry heartbeat.
-    if (process.env.NODE_ENV !== "development") provisionVehicleFlowReconciliationSchedule();
+    // server; every deployed/static runtime needs both scheduled jobs.
+    if (process.env.NODE_ENV !== "development") {
+      provisionVehicleFlowReconciliationSchedule();
+      provisionDailyRetentionCleanupSchedule();
+    }
   });
 }
 
