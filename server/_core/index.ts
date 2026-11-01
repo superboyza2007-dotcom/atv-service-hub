@@ -13,6 +13,7 @@ import { cleanupLiveMessagesHandler } from "../scheduledCleanup";
 import { reconcileVehicleSessionsHandler } from "../scheduledVehicleReconcile";
 import { ensureDailyRetentionCleanupSchedule } from "../dailyRetentionSchedule";
 import { ensureVehicleFlowReconciliationSchedule } from "../vehicleFlowSchedule";
+import { ensureDatabaseMigrations } from "../dbMigrations";
 import { publicPlatformScript } from "./publicConfig";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -59,6 +60,7 @@ function provisionDailyRetentionCleanupSchedule(attempt = 1) {
 }
 
 async function startServer() {
+  await ensureDatabaseMigrations();
   const app = express();
   const server = createServer(app);
   registerPttSignaling(server);
