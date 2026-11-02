@@ -43,7 +43,7 @@ import { FULL_APP_DEMO_REPAIR_REPORTS, isFullAppDemo } from "@/lib/full-app-demo
 import SpeechSettingsPanel from "@/components/SpeechSettingsPanel";
 
 type MechanicTab = "dashboard" | "status" | "tips" | "roundTable" | "communication" | "roundChange" | "settings" | "repair" | "repairBoard" | "waitingParts" | "log";
-type MechanicFollowSession = PayoutSessionLike & { sessionId: string; status: "Active" | "Standby" | "Completed"; startedAt?: string; completedAt?: string; completedById?: string; completedByName?: string; activeUserName?: string; vehicleIds?: string[]; riderCount?: number; passengerCount?: number; overtimeAcknowledged?: boolean; completionTiming?: ReturnType<typeof sessionCompletionTiming>; activityLog?: SessionActivity[] };
+type MechanicFollowSession = PayoutSessionLike & { sessionId: string; status: "Active" | "Standby" | "Completed"; startedAt?: string; scheduledEndAt?: string; timerEnabled?: boolean; expiryBehavior?: "auto_complete" | "overtime"; completedAt?: string; completedById?: string; completedByName?: string; activeUserName?: string; vehicleIds?: string[]; riderCount?: number; passengerCount?: number; overtimeAcknowledged?: boolean; completionTiming?: ReturnType<typeof sessionCompletionTiming>; activityLog?: SessionActivity[] };
 type MechanicFollowPosition = { edge: "left" | "right"; top: number };
 type MechanicFollowDrag = { pointerId: number; startX: number; startY: number; startTop: number; moved: boolean };
 const MECHANIC_FOLLOW_SIZE = 76;
@@ -63,11 +63,9 @@ function MechanicSessionFollowPopup({ session, now, onOpen }: { session?: Mechan
   const dragRef = useRef<MechanicFollowDrag | null>(null);
   const suppressClickRef = useRef(false);
   if (!session || session.status !== "Active") return null;
-  const durationSeconds = Math.max(0, (session.durationMinutes ?? 30) * 60);
-  const startedAtMs = session.startedAt ? Date.parse(session.startedAt) : Number.NaN;
-  const elapsed = Number.isFinite(startedAtMs) ? Math.max(0, Math.floor((now - startedAtMs) / 1000)) : 0;
-  const overtime = Math.max(0, elapsed - durationSeconds);
-  const remaining = Math.max(0, durationSeconds - elapsed);
+  const timing = sessionTiming(session.startedAt, session.durationMinutes ?? 30, now, session.scheduledEndAt);
+  const overtime = timing.overtimeSeconds;
+  const remaining = timing.remainingSeconds;
   const timeLabel = overtime > 0 ? `+${String(Math.floor(overtime / 60)).padStart(2, "0")}:${String(overtime % 60).padStart(2, "0")}` : `${String(Math.floor(remaining / 60)).padStart(2, "0")}:${String(remaining % 60).padStart(2, "0")}`;
   const savePosition = (next: MechanicFollowPosition) => { const safe = { ...next, top: clampMechanicFollowTop(next.top) }; setPosition(safe); };
   const onPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, startTop: position.top, moved: false }; setIsDragging(true); };
@@ -452,9 +450,9 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
   const selectedMechanicFollowSession = guideSessions.find(session => session.sessionId === selectedMechanicFollowSessionId);
   const mechanicCanManageSelected = canMechanicManageSession(directoryMeQuery.data ? { memberId: directoryMeQuery.data.id, group: directoryMeQuery.data.group, special: false } : undefined, selectedMechanicFollowSession?.memberIds ?? []);
   const selectedMechanicMemberNames = mechanicSessionMemberNames(selectedMechanicFollowSession?.memberIds ?? [], directoryUsers);
-  const mechanicDetailTiming = selectedMechanicFollowSession?.status === "Active" ? sessionTiming(selectedMechanicFollowSession.startedAt, selectedMechanicFollowSession.durationMinutes ?? 30, now) : undefined;
+  const mechanicDetailTiming = selectedMechanicFollowSession?.status === "Active" ? sessionTiming(selectedMechanicFollowSession.startedAt, selectedMechanicFollowSession.durationMinutes ?? 30, now, selectedMechanicFollowSession.scheduledEndAt) : undefined;
   useEffect(() => {
-    if (selectedMechanicFollowSession?.status !== "Active" || !selectedMechanicFollowSession.startedAt || selectedMechanicFollowSession.overtimeAcknowledged || !mechanicCanManageSelected || !mechanicDetailTiming || mechanicDetailTiming.overtimeSeconds <= 0) return;
+    if (selectedMechanicFollowSession?.status !== "Active" || selectedMechanicFollowSession.timerEnabled === false || selectedMechanicFollowSession.expiryBehavior === "auto_complete" || !selectedMechanicFollowSession.startedAt || selectedMechanicFollowSession.overtimeAcknowledged || !mechanicCanManageSelected || !mechanicDetailTiming || mechanicDetailTiming.overtimeSeconds <= 0) return;
     setMechanicCompletionPrompt(current => isActiveCompletionPromptFor(current, selectedMechanicFollowSession.sessionId) ? current : createActiveCompletionPrompt(selectedMechanicFollowSession.sessionId, "expired"));
   }, [selectedMechanicFollowSession?.sessionId, selectedMechanicFollowSession?.status, selectedMechanicFollowSession?.startedAt, selectedMechanicFollowSession?.overtimeAcknowledged, mechanicCanManageSelected, mechanicDetailTiming?.overtimeSeconds]);
   const patchSelectedMechanicSession = (patch: Record<string, unknown>) => {

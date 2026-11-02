@@ -9,7 +9,7 @@ export default function SupervisorTimerSettingsPanel() {
   const updateSettings = trpc.supervisorTimerSettings.update.useMutation({
     onSuccess: async settings => {
       setDraft(settings);
-      setSaveMessage("บันทึกการตั้งค่าแล้ว รายการที่เริ่มไปแล้วจะไม่เปลี่ยนตาม");
+      setSaveMessage("บันทึกแล้ว นโยบายหมดเวลามีผลกับรายการที่กำลัง Active และรายการใหม่");
       await utils.supervisorTimerSettings.get.invalidate();
     },
     onError: error => setSaveMessage(error.message || "บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง"),
@@ -28,7 +28,7 @@ export default function SupervisorTimerSettingsPanel() {
 
   return <section className="speech-settings-card supervisor-timer-settings" aria-label="ตั้งค่าเวลาโปรแกรม Active">
     <div className="speech-settings-heading">
-      <div><p>SUPERVISOR / ACTIVE TIMER</p><h3>เวลาโปรแกรม Active</h3><span>ตั้งค่านี้มีผลกับรายการที่เริ่ม Active หลังบันทึกเท่านั้น ไม่เปลี่ยนรายการที่กำลังทำอยู่</span></div>
+      <div><p>SUPERVISOR / ACTIVE TIMER</p><h3>เวลาโปรแกรม Active</h3><span>นโยบายเมื่อหมดเวลามีผลกับรายการที่กำลัง Active และรายการใหม่ ส่วนเวลาเริ่มต้นมีผลกับรายการใหม่เท่านั้น</span></div>
       <Settings2 size={24} aria-hidden="true" />
     </div>
     {settingsQuery.isLoading ? <p className="supervisor-timer-settings-note">กำลังโหลดการตั้งค่า…</p> : settingsQuery.isError ? <p className="supervisor-timer-settings-error" role="alert">โหลดการตั้งค่าไม่สำเร็จ: {settingsQuery.error.message}</p> : <>
@@ -58,7 +58,7 @@ export default function SupervisorTimerSettingsPanel() {
       </div>
       <div className="speech-settings-actions">
         <button type="button" className="m3-primary" onClick={save} disabled={updateSettings.isPending || settingsQuery.isLoading}><Check size={15} />{updateSettings.isPending ? "กำลังบันทึก…" : "บันทึกการตั้งค่า"}</button>
-        <span><Clock3 size={13} /> ค่าใหม่จะถูกบันทึกส่วนกลางและใช้กับรายการที่เริ่มหลังจากนี้</span>
+        <span><Clock3 size={13} /> นโยบายหมดเวลาจะใช้กับรายการ Active ที่เปิดตัวจับเวลาอยู่ทันที</span>
       </div>
       {saveMessage && <p className={updateSettings.isError ? "supervisor-timer-settings-error" : "supervisor-timer-settings-note"} role="status">{saveMessage}</p>}
     </>}

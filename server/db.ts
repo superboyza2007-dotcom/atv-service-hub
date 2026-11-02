@@ -216,9 +216,14 @@ export async function getAppOperationsSnapshot(snapshotKey: string): Promise<str
 export async function upsertAppOperationsSnapshot(snapshotKey: string, payload: string): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  await db.insert(appOperationsSnapshots).values({ snapshotKey, payload }).onDuplicateKeyUpdate({ set: { payload } });
+  const current = (await db.select({ payload: appOperationsSnapshots.payload }).from(appOperationsSnapshots).where(eq(appOperationsSnapshots.snapshotKey, snapshotKey)).limit(1))[0]?.payload;
+  const protectedKeys = new Set(["atv-guide-sessions-v1", "atv-guide-state-v1"]);
+  const nextPayload = protectedKeys.has(snapshotKey)
+    ? JSON.stringify(mergeGuideRepairSnapshotPayload(snapshotKey, parseSnapshotRecord(current), parseSnapshotRecord(payload)))
+    : payload;
+  await db.insert(appOperationsSnapshots).values({ snapshotKey, payload: nextPayload }).onDuplicateKeyUpdate({ set: { payload: nextPayload } });
   const saved = await db.select({ payload: appOperationsSnapshots.payload }).from(appOperationsSnapshots).where(eq(appOperationsSnapshots.snapshotKey, snapshotKey)).limit(1);
-  if (saved[0]?.payload !== payload) throw new Error("Unable to verify saved operations snapshot");
+  if (saved[0]?.payload !== nextPayload) throw new Error("Unable to verify saved operations snapshot");
 }
 
 function parseSnapshotRecord(payload: string | undefined): Record<string, unknown> {
@@ -236,6 +241,12 @@ const GUIDE_REPAIR_SNAPSHOT_KEYS = new Set([
   "atv-guide-state-v1",
 ]);
 
+function isTerminalGuideSession(value: unknown): value is Record<string, unknown> & { sessionId: string; status: "Completed" } {
+  if (!value || typeof value !== "object") return false;
+  const session = value as { sessionId?: unknown; status?: unknown };
+  return typeof session.sessionId === "string" && session.status === "Completed";
+}
+
 function isTerminalGuideRepairReport(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
   const report = value as { status?: unknown; completedAt?: unknown };
@@ -248,30 +259,62 @@ export function mergeGuideRepairSnapshotPayload(
   patch: Record<string, unknown>,
 ): Record<string, unknown> {
   const merged = { ...current, ...patch };
-  if (!GUIDE_REPAIR_SNAPSHOT_KEYS.has(snapshotKey) || !Array.isArray(patch.repairReports)) return merged;
+  if (!GUIDE_REPAIR_SNAPSHOT_KEYS.has(snapshotKey)) return merged;
 
-  const terminalById = new Map<string, unknown>();
-  if (Array.isArray(current.repairReports)) {
-    current.repairReports.forEach(report => {
-      if (!isTerminalGuideRepairReport(report) || !report || typeof report !== "object") return;
+  if (Array.isArray(patch.repairReports)) {
+    const terminalById = new Map<string, unknown>();
+    if (Array.isArray(current.repairReports)) {
+      current.repairReports.forEach(report => {
+        if (!isTerminalGuideRepairReport(report) || !report || typeof report !== "object") return;
+        const id = (report as { id?: unknown }).id;
+        if (typeof id === "string") terminalById.set(id, report);
+      });
+    }
+
+    const incomingIds = new Set<string>();
+    const repairReports = patch.repairReports.map(report => {
+      if (!report || typeof report !== "object") return report;
       const id = (report as { id?: unknown }).id;
-      if (typeof id === "string") terminalById.set(id, report);
+      if (typeof id !== "string") return report;
+      incomingIds.add(id);
+      const terminal = terminalById.get(id);
+      return terminal && !isTerminalGuideRepairReport(report) ? terminal : report;
     });
+    terminalById.forEach((report, id) => {
+      if (!incomingIds.has(id)) repairReports.push(report);
+    });
+    merged.repairReports = repairReports;
   }
 
-  const incomingIds = new Set<string>();
-  const repairReports = patch.repairReports.map(report => {
-    if (!report || typeof report !== "object") return report;
-    const id = (report as { id?: unknown }).id;
-    if (typeof id !== "string") return report;
-    incomingIds.add(id);
-    const terminal = terminalById.get(id);
-    return terminal && !isTerminalGuideRepairReport(report) ? terminal : report;
-  });
-  terminalById.forEach((report, id) => {
-    if (!incomingIds.has(id)) repairReports.push(report);
-  });
-  merged.repairReports = repairReports;
+  if (GUIDE_REPAIR_SNAPSHOT_KEYS.has(snapshotKey) && Array.isArray(patch.sessions)) {
+    const currentTerminalById = new Map<string, Record<string, unknown>>();
+    if (Array.isArray(current.sessions)) {
+      current.sessions.forEach(session => {
+        if (isTerminalGuideSession(session)) currentTerminalById.set(session.sessionId, session);
+      });
+    }
+    const incomingSessionIds = new Set<string>();
+    const sessions = patch.sessions.map(session => {
+      if (!session || typeof session !== "object") return session;
+      const id = (session as { sessionId?: unknown }).sessionId;
+      if (typeof id !== "string") return session;
+      incomingSessionIds.add(id);
+      const existingTerminal = currentTerminalById.get(id);
+      if (!existingTerminal) return session;
+      if (isTerminalGuideSession(session)) {
+        const existingAt = Date.parse(String(existingTerminal.completedAt ?? ""));
+        const incomingAt = Date.parse(String((session as Record<string, unknown>).completedAt ?? ""));
+        const winner = incomingAt >= existingAt ? session as Record<string, unknown> : existingTerminal;
+        const loser = winner === session ? existingTerminal : session as Record<string, unknown>;
+        return { ...loser, ...winner, activityLog: Array.isArray(winner.activityLog) && winner.activityLog.length ? winner.activityLog : loser.activityLog };
+      }
+      return existingTerminal;
+    });
+    currentTerminalById.forEach((session, id) => {
+      if (!incomingSessionIds.has(id)) sessions.push(session);
+    });
+    merged.sessions = sessions;
+  }
   return merged;
 }
 

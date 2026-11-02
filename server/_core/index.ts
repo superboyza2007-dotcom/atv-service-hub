@@ -105,7 +105,7 @@ async function reconcileExpiredSessionsInProcess() {
 
 function startInProcessReconciliationLoop() {
   void reconcileExpiredSessionsInProcess();
-  setInterval(() => void reconcileExpiredSessionsInProcess(), 15_000);
+  setInterval(() => void reconcileExpiredSessionsInProcess(), 1_000);
 }
 
 async function startServer() {
@@ -157,9 +157,9 @@ async function startServer() {
     if (process.env.NODE_ENV !== "development") {
       provisionVehicleFlowReconciliationSchedule();
       provisionDailyRetentionCleanupSchedule();
-      startInProcessReconciliationLoop();
       provisionMechanicRepairExportSchedule();
     }
+    startInProcessReconciliationLoop();
   });
 }
 

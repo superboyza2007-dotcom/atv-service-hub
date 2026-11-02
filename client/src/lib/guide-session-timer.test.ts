@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reconcileExpiredGuideSessions, releaseVehiclesFromFleetSnapshot } from "@shared/guide-session-timer";
+import { applyExpiryBehaviorToActiveGuideSessions, reconcileExpiredGuideSessions, releaseVehiclesFromFleetSnapshot } from "@shared/guide-session-timer";
 
 describe("guide session timer reconciliation", () => {
   it("auto-completes expired sessions and releases their vehicle numbers", () => {
@@ -48,6 +48,27 @@ describe("guide session timer reconciliation", () => {
     const result = reconcileExpiredGuideSessions(payload, Date.parse("2026-10-27T10:30:00.000Z"));
     expect(result.payload).toBe(payload);
     expect(result.completedSessionIds).toEqual([]);
+    const completed = reconcileExpiredGuideSessions(payload, Date.parse("2026-10-27T10:45:00.000Z"));
+    expect(completed.completedSessionIds).toEqual(["future"]);
+    expect(JSON.parse(completed.payload).sessions[0].completionTiming.plannedSeconds).toBe(45 * 60);
+  });
+
+  it("uses the current auto-complete policy for legacy active sessions without per-session timer fields", () => {
+    const payload = JSON.stringify({ sessions: [{ sessionId: "legacy-auto", status: "Active", startedAt: "2026-10-27T10:00:00.000Z", durationMinutes: 30, vehicleIds: ["m3-v12"] }] });
+    const result = reconcileExpiredGuideSessions(payload, Date.parse("2026-10-27T10:30:01.000Z"), { enabled: true, expiryBehavior: "auto_complete" });
+    expect(result.completedSessionIds).toEqual(["legacy-auto"]);
+    expect(JSON.parse(result.payload).sessions[0].status).toBe("Completed");
+  });
+
+  it("applies a newly saved expiry policy to active timed sessions", () => {
+    const payload = JSON.stringify({ sessions: [
+      { sessionId: "active", status: "Active", timerEnabled: true, expiryBehavior: "overtime" },
+      { sessionId: "disabled", status: "Active", timerEnabled: false, expiryBehavior: "overtime" },
+      { sessionId: "done", status: "Completed", timerEnabled: true, expiryBehavior: "overtime" },
+    ] });
+    const result = applyExpiryBehaviorToActiveGuideSessions(payload, "auto_complete");
+    expect(result.updatedSessionCount).toBe(1);
+    expect(JSON.parse(result.payload).sessions.map((session: { expiryBehavior: string }) => session.expiryBehavior)).toEqual(["auto_complete", "overtime", "overtime"]);
   });
 
   it("removes returned vehicles from active fleet membership without changing unrelated fields", () => {

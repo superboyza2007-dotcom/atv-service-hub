@@ -342,7 +342,9 @@ export async function activateVehicleSession(input: { sessionId: number; actor: 
   const session = (await db.select().from(vehicleSessions).where(eq(vehicleSessions.id, input.sessionId)).limit(1))[0];
   if (!session) throw new Error("ไม่พบรายการ Session");
   if (session.status !== "standby") throw new VehicleFlowRuleError("Session นี้ไม่อยู่ในสถานะ Standby");
-  await db.update(vehicleSessions).set({ status: "active", startedAt: new Date(), timerEnabled: timerSettings.enabled, expiryBehavior: timerSettings.expiryBehavior }).where(eq(vehicleSessions.id, input.sessionId));
+  const startedAt = new Date();
+  await db.update(vehicleSessions).set({ status: "active", startedAt, timerEnabled: timerSettings.enabled, expiryBehavior: timerSettings.expiryBehavior }).where(eq(vehicleSessions.id, input.sessionId));
+  return { startedAt, timerEnabled: timerSettings.enabled, expiryBehavior: timerSettings.expiryBehavior };
 }
 
 export async function cancelVehicleSession(input: { sessionId: number; actor: VehicleActor }) {
@@ -419,17 +421,83 @@ export async function completeVehicleSession(input: { sessionId: number; actor: 
   return { returnedVehicleCount };
 }
 
+async function completeExpiredVehicleSessionAtomically(sessionId: number, now: Date): Promise<number | null> {
+  const db = await requireDatabase();
+  return db.transaction(async tx => {
+    const session = (await tx.select().from(vehicleSessions).where(eq(vehicleSessions.id, sessionId)).limit(1))[0];
+    if (!session || session.status !== "active" || !session.timerEnabled || session.expiryBehavior !== "auto_complete" || !session.startedAt) return null;
+    if (session.startedAt.getTime() + session.durationMinutes * 60_000 > now.getTime()) return null;
+
+    const claimed = await tx.update(vehicleSessions).set({ status: "completed", completedAt: now }).where(and(
+      eq(vehicleSessions.id, sessionId),
+      eq(vehicleSessions.status, "active"),
+      eq(vehicleSessions.timerEnabled, true),
+      eq(vehicleSessions.expiryBehavior, "auto_complete"),
+    ));
+    if (Number(claimed[0]?.affectedRows ?? 0) !== 1) return null;
+
+    const links = await tx.select({ vehicleId: vehicleSessionVehicles.vehicleId })
+      .from(vehicleSessionVehicles)
+      .where(eq(vehicleSessionVehicles.sessionId, sessionId));
+    let returnedVehicleCount = 0;
+    for (const link of links) {
+      const vehicle = (await tx.select({ id: vehicles.id, status: vehicles.status })
+        .from(vehicles)
+        .where(eq(vehicles.id, link.vehicleId))
+        .limit(1))[0];
+      if (!vehicle || vehicle.status !== "active") continue;
+
+      assertVehicleTransition({
+        from: vehicle.status,
+        to: "ready",
+        eventType: "session_completed",
+        appRole: "user",
+        membershipRole: null,
+      });
+      const changed = await tx.update(vehicles).set({ status: "ready" }).where(and(
+        eq(vehicles.id, vehicle.id),
+        eq(vehicles.status, "active"),
+      ));
+      if (Number(changed[0]?.affectedRows ?? 0) !== 1) continue;
+      await tx.insert(vehicleStatusHistory).values({
+        vehicleId: vehicle.id,
+        fromStatus: "active",
+        toStatus: "ready",
+        eventType: "session_completed",
+        actorUserId: null,
+        repairJobId: null,
+        sessionId,
+        note: "ครบเวลาโปรแกรม ระบบคืนรถเป็นพร้อมใช้โดยอัตโนมัติ",
+      });
+      returnedVehicleCount += 1;
+    }
+
+    await tx.delete(vehicleSessions).where(and(
+      eq(vehicleSessions.id, sessionId),
+      eq(vehicleSessions.status, "completed"),
+    ));
+    return returnedVehicleCount;
+  });
+}
+
 export async function reconcileExpiredVehicleSessions(now = new Date()) {
   const db = await requireDatabase();
   const activeSessions = await db.select().from(vehicleSessions).where(eq(vehicleSessions.status, "active"));
   const expired = activeSessions.filter(session => session.timerEnabled && session.expiryBehavior === "auto_complete" && session.startedAt && session.startedAt.getTime() + session.durationMinutes * 60_000 <= now.getTime());
+  let expiredSessionCount = 0;
   let returnedVehicleCount = 0;
 
   for (const session of expired) {
-    const result = await completeVehicleSession({ sessionId: session.id, actor: null, completedAt: now });
-    returnedVehicleCount += result.returnedVehicleCount;
+    try {
+      const returned = await completeExpiredVehicleSessionAtomically(session.id, now);
+      if (returned === null) continue;
+      expiredSessionCount += 1;
+      returnedVehicleCount += returned;
+    } catch (error) {
+      console.error(`[vehicle-session-reconcile] failed to auto-complete session ${session.id}`, error);
+    }
   }
-  return { expiredSessionCount: expired.length, returnedVehicleCount };
+  return { expiredSessionCount, returnedVehicleCount };
 }
 
 export type ActiveQueueItem = {

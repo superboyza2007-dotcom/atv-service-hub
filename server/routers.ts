@@ -29,6 +29,7 @@ import { createRepairWorkflowItem, completeRepairWorkflowItem, listRepairWorkflo
 import { archiveMechanicRepairRecord, createMechanicRepairRecord, listMechanicRepairRecords, updateMechanicRepairRecord } from "./mechanicRepairService";
 import { exportPendingMechanicRepairRecords } from "./repairLogExportService";
 import { normalizeSupervisorTimerSettings, SUPERVISOR_TIMER_SETTINGS_SNAPSHOT_KEY } from "../shared/supervisor-timer-settings";
+import { applyExpiryBehaviorToActiveSessions } from "./supervisorTimerSettings";
 
 const vehicleActor = (user: { id: number; role: "user" | "guide" | "mechanic" | "supervisor" | "admin" }) => ({
   id: user.id,
@@ -291,6 +292,7 @@ export const appRouter = router({
       if (!isSupervisor) throw new TRPCError({ code: "FORBIDDEN", message: "Supervisor permission required" });
       const settings = normalizeSupervisorTimerSettings(input);
       await upsertAppOperationsSnapshot(SUPERVISOR_TIMER_SETTINGS_SNAPSHOT_KEY, JSON.stringify(settings));
+      await applyExpiryBehaviorToActiveSessions(settings.expiryBehavior);
       return settings;
     }),
   }),

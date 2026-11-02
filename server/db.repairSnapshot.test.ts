@@ -41,6 +41,19 @@ describe("Guide repair snapshot persistence", () => {
     );
     expect(merged.repairReports).toEqual([staleOpen]);
   });
+
+  it("does not let a stale Active session reopen a completed session", () => {
+    const completedSession = { sessionId: "M3-1", status: "Completed", completedAt: "2026-10-01T10:30:00.000Z", completedByName: "ระบบ" };
+    const staleActiveSession = { sessionId: "M3-1", status: "Active", startedAt: "2026-10-01T10:00:00.000Z" };
+    const merged = mergeGuideRepairSnapshotPayload("atv-guide-sessions-v1", { sessions: [completedSession] }, { sessions: [staleActiveSession] });
+    expect(merged.sessions).toEqual([completedSession]);
+  });
+
+  it("keeps completed sessions when a stale device omits them", () => {
+    const completedSession = { sessionId: "M3-2", status: "Completed", completedAt: "2026-10-01T10:30:00.000Z" };
+    const merged = mergeGuideRepairSnapshotPayload("atv-guide-state-v1", { sessions: [completedSession] }, { sessions: [] });
+    expect(merged.sessions).toEqual([completedSession]);
+  });
 });
 
 
