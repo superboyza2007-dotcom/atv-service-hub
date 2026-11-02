@@ -14109,12 +14109,87 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
 .mechanic-waiting-parts-form { display: grid; gap: 12px; max-width: 680px; padding: 18px; border: 1px solid rgba(231, 121, 88, .5); border-radius: 12px; background: rgba(105, 48, 33, .24); }
 .mechanic-waiting-parts-form strong { color: #ffe5d8; font-size: 18px; }.mechanic-waiting-parts-form p { margin: 0; color: #e7b8a5; line-height: 1.45; }.mechanic-waiting-parts-form textarea { min-height: 130px; padding: 11px; border: 1px solid rgba(255,255,255,.25); border-radius: 8px; color: #effff3; background: rgba(0,0,0,.24); resize: vertical; }.mechanic-waiting-parts-form > div { display: flex; flex-wrap: wrap; gap: 8px; }.mechanic-waiting-parts-form button { min-height: 38px; padding: 7px 12px; border-radius: 7px; }
 @media (max-width: 720px) { .mechanic-repair-board-columns { grid-template-columns: repeat(4, minmax(152px, 1fr)); } }
-
 .mechanic-inline-log-heading { display: grid; gap: 3px; margin-top: 22px; padding: 14px 0 8px; border-top: 1px solid rgba(143, 186, 161, .3); }
 .mechanic-inline-log-heading p { margin: 0; color: #9dafaa; font-size: 10px; letter-spacing: .08em; }.mechanic-inline-log-heading h3 { margin: 0; color: #effff3; font-size: 18px; }.mechanic-inline-log-heading small { color: #9dafaa; font-size: 11px; }
-
 .mechanic-repair-dialog-actions-two { grid-template-columns: 1fr 1fr; }.dialog-back { background: #465e60; }.dialog-back:hover { background: #5e7779; }
 .mechanic-repair-board-card-id { color: #83c9a0; font-size: 9px; font-style: normal; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }.mechanic-sheet-table code { color: #bde8c8; font-size: 10px; }.mechanic-sheet-table td > small { display: block; color: #9dafaa; font-size: 10px; }
+/* Mobile repair board: keep every status column visible in one viewport. */
+@media (max-width: 720px) {
+  .mechanic-repair-board {
+    gap: 10px;
+    padding: 8px;
+  }
+
+  .mechanic-repair-board-columns {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+    padding-bottom: 0;
+  }
+
+  .mechanic-repair-board-column {
+    min-height: 300px;
+    border-radius: 7px;
+  }
+
+  .mechanic-repair-board-column > header {
+    min-height: 48px;
+    gap: 2px;
+    padding: 5px 3px;
+    border-bottom-width: 2px;
+  }
+
+  .mechanic-repair-board-column > header h4 {
+    font-size: clamp(7px, 2.15vw, 10px);
+    line-height: 1.1;
+    overflow-wrap: anywhere;
+  }
+
+  .mechanic-repair-board-column > header b {
+    min-width: 17px;
+    padding: 2px 3px;
+    font-size: 9px;
+  }
+
+  .mechanic-repair-board-list {
+    min-height: 248px;
+    gap: 4px;
+    padding: 4px 3px;
+  }
+
+  .mechanic-repair-board-card {
+    border-radius: 5px;
+  }
+
+  .mechanic-repair-board-card-open {
+    gap: 3px;
+    padding: 5px 4px;
+  }
+
+  .mechanic-repair-board-card-open strong {
+    font-size: clamp(8px, 2.45vw, 11px);
+    line-height: 1.15;
+  }
+
+  .mechanic-repair-board-card-open span {
+    font-size: clamp(7px, 2vw, 9px);
+    line-height: 1.2;
+  }
+
+  .mechanic-repair-board-card-open small,
+  .mechanic-repair-board-card-id {
+    font-size: 7px;
+    line-height: 1.1;
+  }
+
+  .mechanic-repair-board-empty {
+    font-size: 8px;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+}
 /* Full-app demo test center */
 .full-app-demo-shell { max-width: 1180px; margin: 0 auto; padding: 28px 20px 72px; }
 .full-app-demo-hero { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 28px; border: 1px solid rgba(129,229,151,.35); }
@@ -14213,3 +14288,70 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
 .mechanic-pre-due-progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #d49b36, #ffe09a); }
 .mechanic-pre-due-empty { margin: 0; padding: 18px 8px; color: #a99a70; text-align: center; font-size: 11px; }
 @media (max-width: 560px) { .mechanic-pre-due-board { padding: 10px; }.mechanic-pre-due-heading h3 { font-size: 16px; }.mechanic-pre-due-columns { gap: 7px; }.mechanic-pre-due-column > header { padding: 8px; }.mechanic-pre-due-column > header h4 { font-size: 12px; }.mechanic-pre-due-list { padding: 6px; }.mechanic-pre-due-card { padding: 8px; }.mechanic-pre-due-progress { grid-template-columns: 1fr auto; }.mechanic-pre-due-progress > span { grid-column: 1 / -1; grid-row: 2; }.mechanic-pre-due-progress b { font-size: 9px; } }
+/* Compact populated pre-due cards on narrow screens; empty states keep their normal spacing. */
+@media (max-width: 560px) {
+  .mechanic-pre-due-card {
+    gap: 3px;
+    min-height: 0;
+    padding: 4px;
+    border-radius: 6px;
+  }
+
+  .mechanic-pre-due-card > div:first-child {
+    gap: 1px;
+  }
+
+  .mechanic-pre-due-card strong {
+    font-size: 10px;
+    line-height: 1.15;
+  }
+
+  .mechanic-pre-due-card span,
+  .mechanic-pre-due-card small {
+    font-size: 7px;
+    line-height: 1.15;
+  }
+
+  .mechanic-pre-due-progress {
+    gap: 2px 4px;
+  }
+
+  .mechanic-pre-due-progress b,
+  .mechanic-pre-due-progress em {
+    font-size: 7px;
+    line-height: 1.1;
+  }
+
+  .mechanic-pre-due-progress > span {
+    height: 4px;
+  }
+}
+/* Keep populated Repair Board cards compact on tablet widths as well as mobile. */
+@media (max-width: 900px) {
+  .mechanic-repair-board-list {
+    gap: 3px;
+    min-height: 220px;
+    padding: 4px;
+  }
+
+  .mechanic-repair-board-card-open {
+    gap: 2px;
+    padding: 4px;
+  }
+
+  .mechanic-repair-board-card-open strong {
+    font-size: 8px;
+    line-height: 1.15;
+  }
+
+  .mechanic-repair-board-card-open span {
+    font-size: 7px;
+    line-height: 1.2;
+  }
+
+  .mechanic-repair-board-card-open small,
+  .mechanic-repair-board-card-id {
+    font-size: 6px;
+    line-height: 1.1;
+  }
+}
