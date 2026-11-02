@@ -14231,3 +14231,19 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
 .mechanic-maintenance-detail-unavailable { margin: 0; color: #d5c89f; text-align: center; }
 @media (max-width: 420px) { .mechanic-maintenance-detail-dialog { padding: 18px; }.mechanic-maintenance-detail-header h2 { font-size: 18px; }.mechanic-maintenance-detail-actions { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .mechanic-pre-due-board { padding: 10px; }.mechanic-pre-due-heading h3 { font-size: 16px; }.mechanic-pre-due-columns { gap: 7px; }.mechanic-pre-due-column > header { padding: 8px; }.mechanic-pre-due-column > header h4 { font-size: 12px; }.mechanic-pre-due-list { padding: 6px; }.mechanic-pre-due-card { padding: 8px; }.mechanic-pre-due-progress { grid-template-columns: 1fr auto; }.mechanic-pre-due-progress > span { grid-column: 1 / -1; grid-row: 2; }.mechanic-pre-due-progress b { font-size: 9px; } }
+
+
+/* Guide alert detail popup opened from the reported column in the repair board. */
+.mechanic-repair-board-detail-dialog { width: min(480px, calc(100vw - 28px)); max-height: min(86vh, 680px); overflow-y: auto; padding: 20px; border: 1px solid rgba(124, 229, 157, .55); border-radius: 14px; color: #ecfff1; background: linear-gradient(155deg, #173432, #0b2022 72%); box-shadow: 0 18px 60px rgba(0, 0, 0, .48); }
+.mechanic-repair-board-detail-header { display: grid; gap: 5px; margin-bottom: 16px; padding-right: 28px; }
+.mechanic-repair-board-detail-header > span { color: #9dafaa; font-size: 10px; letter-spacing: .08em; }
+.mechanic-repair-board-detail-header h2 { margin: 0; color: #f1fff4; font-size: 20px; }
+.mechanic-repair-board-detail-header p { margin: 0; color: #a8beb0; font-size: 12px; line-height: 1.4; }
+.mechanic-repair-board-detail-list { display: grid; gap: 9px; margin: 0 0 16px; }
+.mechanic-repair-board-detail-list > div { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid rgba(143, 186, 161, .2); border-radius: 8px; background: rgba(3, 18, 19, .55); }
+.mechanic-repair-board-detail-list dt { color: #9dafaa; font-size: 11px; }
+.mechanic-repair-board-detail-list dd { margin: 0; color: #f0fff3; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.mechanic-repair-board-detail-symptom dd { white-space: pre-wrap; }
+.mechanic-repair-board-start-repair { width: 100%; min-height: 46px; border: 0; border-radius: 8px; color: #fff; font-size: 14px; font-weight: 800; cursor: pointer; }
+.mechanic-repair-board-start-repair:hover { filter: brightness(1.15); }
+@media (max-width: 520px) { .mechanic-repair-board-detail-dialog { padding: 17px; } .mechanic-repair-board-detail-header h2 { font-size: 18px; } }

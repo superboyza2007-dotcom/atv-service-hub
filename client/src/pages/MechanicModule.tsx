@@ -134,7 +134,9 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
   const [repairBoardStages, setRepairBoardStages] = useState<Record<string, "กำลังประเมิน" | "รออะไหล่ใช้งานได้" | "รออะไหล่ห้ามใช้งาน">>(() => isMechanicDemo ? { "demo-guide-repair-28": "กำลังประเมิน" } : fullAppDemo ? { "demo-repair-21": "กำลังประเมิน", "demo-repair-25": "รออะไหล่ห้ามใช้งาน" } : {} as Record<string, "กำลังประเมิน" | "รออะไหล่ใช้งานได้" | "รออะไหล่ห้ามใช้งาน">);
   const [repairBoardOutcomeDetails, setRepairBoardOutcomeDetails] = useState<Record<string, string>>(() => ({}));
   const [selectedRepairBoardReport, setSelectedRepairBoardReport] = useState<GuideRepairReport>();
+  const [selectedRepairBoardNotice, setSelectedRepairBoardNotice] = useState<VehicleSafetyNotice>();
   const [repairBoardRepairCompletionId, setRepairBoardRepairCompletionId] = useState<string>();
+  const [repairBoardSourceNotice, setRepairBoardSourceNotice] = useState<VehicleSafetyNotice>();
   const [repairBoardPendingAlertId, setRepairBoardPendingAlertId] = useState<string>();
   const [repairBoardPendingPartsId, setRepairBoardPendingPartsId] = useState<string>();
   const [repairWaitingPartDetail, setRepairWaitingPartDetail] = useState("");
@@ -650,7 +652,7 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
     saveVehicleFlowSnapshotMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.vehicleFlow, payload: serializeOperationsSnapshot({ safetyNotices: nextNotices }) });
   };
 
-  const resetRepairForm = () => { setRepairVehicle(""); setRepairSymptom(""); setSelectedGuideRepairId(undefined); setRepairParts(""); setRepairDecision(""); setEditingRepairId(undefined); setRepairFormMessage(""); };
+  const resetRepairForm = () => { setRepairVehicle(""); setRepairSymptom(""); setSelectedGuideRepairId(undefined); setRepairParts(""); setRepairDecision(""); setEditingRepairId(undefined); setRepairFormMessage(""); setRepairBoardSourceNotice(undefined); };
   const addRepairPartOption = () => {
     const option = newRepairPartOption.trim();
     if (!option || repairPartOptions.includes(option)) return;
@@ -731,8 +733,12 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
     const completedWaitingNoticeIds = completedWaitingAlertId
       ? new Set([completedWaitingAlertId, ...safetyNotices.filter(notice => notice.sourceRepairReportId === completedWaitingAlertId).map(notice => notice.id)])
       : undefined;
-    const nextSafetyNotices = completedWaitingAlertId
-      ? safetyNotices.filter(notice => !completedWaitingNoticeIds?.has(notice.id) && notice.sourceRepairReportId !== completedWaitingAlertId)
+    const resolvesSourceNotice = repairBoardSourceNotice?.vehicleNumber === vehicleNumber;
+    const resolvedNoticeIds = new Set<string>();
+    completedWaitingNoticeIds?.forEach(id => resolvedNoticeIds.add(id));
+    if (resolvesSourceNotice && repairBoardSourceNotice) resolvedNoticeIds.add(repairBoardSourceNotice.id);
+    const nextSafetyNotices = resolvedNoticeIds.size || completedWaitingAlertId
+      ? safetyNotices.filter(notice => !resolvedNoticeIds.has(notice.id) && (!completedWaitingAlertId || notice.sourceRepairReportId !== completedWaitingAlertId))
       : safetyNotices;
     const nextGuideRepairReports = persistGuideRepairLifecycle(nextRepair, status, now, mechanicName, guideRepairReports) ?? guideRepairReports;
     const nextStages = completedWaitingAlertId ? { ...repairBoardStages } : repairBoardStages;
@@ -749,8 +755,10 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
       ? repairRecords.map(repair => repair.id === editingRepairId ? nextRepair : repair)
       : [nextRepair, ...repairRecords];
     setLocalState(nextLocalState);
-    if (completedWaitingAlertId) {
+    if (completedWaitingAlertId || resolvesSourceNotice) {
       setSafetyNotices(nextSafetyNotices);
+    }
+    if (completedWaitingAlertId) {
       setRepairBoardStages(nextStages);
       setRepairBoardOutcomeDetails(nextDetails);
       setRepairBoardRepairCompletionId(undefined);
@@ -809,7 +817,7 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
     saveGuideStateMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.guideState, payload: repairReportsPayload });
     resetRepairForm();
   };
-  const editRepair = (repair: RepairRecord) => { setRepairVehicle(String(repair.vehicleNumber)); setRepairSymptom(repair.symptom); setSelectedGuideRepairId(repair.sourceGuideRepairId); setRepairParts(repair.parts); setRepairDecision(repair.decision ?? (repair.status === "แจ้งรับรถ" ? "แจ้งรับรถ" : "ไม่แจ้งรับรถ")); setEditingRepairId(repair.id); setTab("repair"); };
+  const editRepair = (repair: RepairRecord) => { setRepairBoardSourceNotice(undefined); setRepairVehicle(String(repair.vehicleNumber)); setRepairSymptom(repair.symptom); setSelectedGuideRepairId(repair.sourceGuideRepairId); setRepairParts(repair.parts); setRepairDecision(repair.decision ?? (repair.status === "แจ้งรับรถ" ? "แจ้งรับรถ" : "ไม่แจ้งรับรถ")); setEditingRepairId(repair.id); setTab("repair"); };
   const deleteRepair = async (repair: RepairRecord) => {
     try {
       await archiveMechanicRepairMutation.mutateAsync({ id: repair.id });
@@ -938,6 +946,8 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
   };
   const openRepairBoardReport = (report: GuideRepairReport) => setSelectedRepairBoardReport(report);
   const closeRepairBoardReport = () => setSelectedRepairBoardReport(undefined);
+  const openRepairBoardGuideNotice = (notice: VehicleSafetyNotice) => setSelectedRepairBoardNotice(notice);
+  const closeRepairBoardGuideNotice = () => setSelectedRepairBoardNotice(undefined);
   const chooseRepairBoardRepair = (report: GuideRepairReport) => {
     const waitingPartDetail = safetyNotices.find(notice => notice.id === report.id)?.waitingPartDetail?.trim() || repairBoardOutcomeDetails[report.id]?.trim() || "";
     setRepairVehicle(guideRepairVehicleSelection(report.vehicleId));
@@ -947,8 +957,28 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
     if (waitingPartDetail) setRepairPartOptions(options => options.includes(waitingPartDetail) ? options : [...options, waitingPartDetail]);
     setRepairDecision("");
     setEditingRepairId(undefined);
+    setRepairBoardSourceNotice(undefined);
     if (repairBoardStages[report.id] === "รออะไหล่ใช้งานได้" || repairBoardStages[report.id] === "รออะไหล่ห้ามใช้งาน") setRepairBoardRepairCompletionId(report.id);
     closeRepairBoardReport();
+    setTab("repair");
+  };
+  const chooseRepairBoardNoticeRepair = (notice: VehicleSafetyNotice) => {
+    const linkedReport = guideRepairReports.find(report => report.id === notice.sourceRepairReportId || report.id === notice.id);
+    if (linkedReport) {
+      chooseRepairBoardRepair(linkedReport);
+      setRepairBoardSourceNotice(notice);
+      closeRepairBoardGuideNotice();
+      return;
+    }
+    setRepairVehicle(String(notice.vehicleNumber));
+    setRepairSymptom(notice.description);
+    setSelectedGuideRepairId(undefined);
+    setRepairParts("");
+    setRepairDecision("");
+    setEditingRepairId(undefined);
+    setRepairFormMessage("");
+    setRepairBoardSourceNotice(notice);
+    closeRepairBoardGuideNotice();
     setTab("repair");
   };
   const chooseRepairBoardUsableWait = (report: GuideRepairReport) => {
@@ -987,19 +1017,44 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
     setRepairBoardOutcomeDetails(nextDetails);
     saveGuideSessionsMutation.mutate({ key: OPERATIONS_SNAPSHOT_KEYS.guideSessions, payload: serializeOperationsSnapshot({ repairReports: reports, repairBoardStages: nextStages, repairBoardOutcomeDetails: nextDetails }) });
   };
+  const repairBoardGuideNoticeDialog = selectedRepairBoardNotice ? <Dialog open={Boolean(selectedRepairBoardNotice)} onOpenChange={open => { if (!open) closeRepairBoardGuideNotice(); }}>
+    <DialogContent className="mechanic-repair-board-detail-dialog">
+      <DialogHeader className="mechanic-repair-board-detail-header">
+        <span>GUIDE ALERT / REPAIR INTAKE</span>
+        <DialogTitle>รายละเอียดรายการแจ้ง</DialogTitle>
+        <DialogDescription>ตรวจสอบข้อมูลรถและอาการก่อนเปิดรายการซ่อม</DialogDescription>
+      </DialogHeader>
+      <dl className="mechanic-repair-board-detail-list">
+        <div><dt>เบอร์รถ</dt><dd>#{selectedRepairBoardNotice.vehicleNumber}</dd></div>
+        <div><dt>กลุ่ม</dt><dd>{vehicleResponsibilityMeta(selectedRepairBoardNotice.vehicleNumber).groupLabel}</dd></div>
+        <div className="mechanic-repair-board-detail-symptom"><dt>อาการ</dt><dd>{selectedRepairBoardNotice.description}</dd></div>
+        <div><dt>ผู้แจ้ง</dt><dd>{selectedRepairBoardNotice.reporter}</dd></div>
+      </dl>
+      <button type="button" className="dialog-repair-done mechanic-repair-board-start-repair" onClick={() => chooseRepairBoardNoticeRepair(selectedRepairBoardNotice)}>ซ่อมแล้ว</button>
+    </DialogContent>
+  </Dialog> : null;
   const mechanicTabs = guideTipsOnly
     ? <nav className="mechanic-top-tabs" aria-label="เมนูไกด์"><button type="button" className={tab === "tips" ? "selected" : ""} onClick={() => setTab("tips")}><AlertTriangle size={15} /> เตือนระวัง</button></nav>
     : <nav className="mechanic-top-tabs" aria-label="ทางลัดงานช่าง"><button type="button" className={tab === "dashboard" ? "selected" : ""} onClick={() => setTab("dashboard")}><Wrench size={15} /> หน้าแรกช่าง</button><button type="button" className={tab === "roundChange" ? "selected" : ""} onClick={() => setTab("roundChange")}><RotateCcw size={15} /> ตั้งค่ารอบเปลี่ยน</button><button type="button" className={tab === "roundTable" ? "selected" : ""} onClick={() => { setRoundPageOffset(payoutPageOffsetForDate(new Date())); setTab("roundTable"); }}><Table2 size={15} /> ตารางค่ารอบ</button></nav>;
   const mechanicBottomNav = guideTipsOnly
     ? <nav className="mechanic-bottom-nav" aria-label="เมนูไกด์"><button type="button" className="selected" onClick={() => setTab("tips")}><AlertTriangle size={16} /><span>เตือนระวัง</span></button><button type="button" onClick={() => { window.location.href = "/?module=guide"; }}><ArrowLeft size={16} /><span>กลับโมดูลไกด์</span></button></nav>
     : <nav className="mechanic-bottom-nav" aria-label="เมนูหลักโมดูลช่าง">{([{ id: "dashboard", label: "หน้าแรก", icon: Wrench }, { id: "communication", label: "ห้องสื่อสาร", icon: MessageCircle }, { id: "settings", label: "ตั้งค่า", icon: Settings2 }] as const).map(item => { const Icon = item.icon; return <button type="button" key={item.id} className={tab === item.id ? "selected" : ""} onClick={() => setTab(item.id)}><Icon size={16} /><span>{item.label}</span></button>; })}</nav>;
-  const repairBoardPanel = <section className="mechanic-repair-board" aria-label="บอร์ดงานซ่อม"><div className="mechanic-repair-board-heading"><div><span>MECHANIC / REPAIR BOARD</span><h3>บอร์ดติดตามงานซ่อม</h3><small>รายการจาก Guide และรายการซ่อมที่บันทึกในระบบ</small></div><ClipboardList size={24} /></div><div className="mechanic-repair-board-columns">{repairBoardColumns.map(column => <section className={`mechanic-repair-board-column ${column.tone}`} key={column.id} aria-labelledby={`repair-board-${column.id}`}><header><h4 id={`repair-board-${column.id}`}>{column.title}</h4><b>{column.cards.length}</b></header><div className="mechanic-repair-board-list">{column.cards.length ? column.cards.map(card => <article className="mechanic-repair-board-card" key={card.id}><button type="button" className="mechanic-repair-board-card-open" onClick={() => { if (card.kind === "report") { openRepairBoardReport(card.report); } else if (card.kind === "alert") { openSafetyNotices([card.notice]); } else { editRepair(card.repair); } }}><strong>{card.title}</strong><span>{card.detail}</span><small>{card.meta}</small><em className="mechanic-repair-board-card-id">ID: {card.id}</em></button></article>) : <p className="mechanic-repair-board-empty">ยังไม่มีรายการ</p>}</div></section>)}</div></section>;
+  const repairBoardPanel = <section className="mechanic-repair-board" aria-label="บอร์ดงานซ่อม">
+    <div className="mechanic-repair-board-heading"><div><span>MECHANIC / REPAIR BOARD</span><h3>บอร์ดติดตามงานซ่อม</h3><small>รายการจาก Guide และรายการซ่อมที่บันทึกในระบบ</small></div><ClipboardList size={24} /></div>
+    <div className="mechanic-repair-board-columns">{repairBoardColumns.map(column => <section className={`mechanic-repair-board-column ${column.tone}`} key={column.id} aria-labelledby={`repair-board-${column.id}`}>
+      <header><h4 id={`repair-board-${column.id}`}>{column.title}</h4><b>{column.cards.length}</b></header>
+      <div className="mechanic-repair-board-list">{column.cards.length ? column.cards.map(card => <article className="mechanic-repair-board-card" key={card.id}>
+        <button type="button" className="mechanic-repair-board-card-open" onClick={() => { if (card.kind === "report") openRepairBoardReport(card.report); else if (card.kind === "alert") openRepairBoardGuideNotice(card.notice); else editRepair(card.repair); }}><strong>{card.title}</strong><span>{card.detail}</span><small>{card.meta}</small><em className="mechanic-repair-board-card-id">ID: {card.id}</em></button>
+      </article>) : <p className="mechanic-repair-board-empty">ยังไม่มีรายการ</p>}</div>
+    </section>)}</div>
+  </section>;
   const repairBoardDetailDialog = selectedRepairBoardReport ? (() => { const waitingStage = repairBoardStages[selectedRepairBoardReport.id]; const isWaiting = waitingStage === "รออะไหล่ใช้งานได้" || waitingStage === "รออะไหล่ห้ามใช้งาน"; const waitingPartDetail = repairBoardOutcomeDetails[selectedRepairBoardReport.id]?.trim(); const waitingDays = Math.max(0, Math.floor((Date.now() - Date.parse(selectedRepairBoardReport.createdAt)) / 86400000)); return <div className="mechanic-repair-dialog-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) closeRepairBoardReport(); }}><section className="mechanic-repair-dialog" role="dialog" aria-modal="true" aria-labelledby="mechanic-repair-dialog-title"><header><div><span>{isWaiting ? "WAITING PARTS DETAIL" : "REPAIR REPORT DETAIL"}</span><h3 id="mechanic-repair-dialog-title">รายละเอียดแจ้งซ่อม · รถ #{extractGuideVehicleNumber(selectedRepairBoardReport.vehicleId) ?? "-"}</h3></div><button type="button" onClick={closeRepairBoardReport} aria-label="ปิดรายละเอียด">×</button></header><dl><div><dt>ผู้แจ้ง</dt><dd>{selectedRepairBoardReport.reporter}</dd></div><div><dt>อาการ</dt><dd>{selectedRepairBoardReport.description}</dd></div>{isWaiting && <div><dt>อะไหล่ที่รอ</dt><dd>{waitingPartDetail || "ยังไม่ได้ระบุ"}</dd></div>}<div><dt>วันที่แจ้ง</dt><dd>{formatThaiDate(selectedRepairBoardReport.createdAt)}</dd></div>{isWaiting && <div><dt>จำนวนวันที่รออะไหล่จนถึงปัจจุบัน</dt><dd>{waitingDays} วัน</dd></div>}</dl>{isWaiting ? <div className="mechanic-repair-dialog-actions mechanic-repair-dialog-actions-two"><button type="button" className="dialog-repair-done" onClick={() => chooseRepairBoardRepair(selectedRepairBoardReport)}>แจ้งซ่อม</button><button type="button" className="dialog-back" onClick={closeRepairBoardReport}>กลับ</button></div> : <div className="mechanic-repair-dialog-actions"><button type="button" className="dialog-repair-done" onClick={() => chooseRepairBoardRepair(selectedRepairBoardReport)}>ซ่อมแล้ว</button><button type="button" className="dialog-wait-usable" onClick={() => chooseRepairBoardUsableWait(selectedRepairBoardReport)}>รออะไหล่ใช้งานได้</button><button type="button" className="dialog-wait-unavailable" onClick={() => chooseRepairBoardUnavailableWait(selectedRepairBoardReport)}>รออะไหล่ห้ามใช้งาน</button></div>}</section></div>; })() : null;
   if (tab === "status") return <VehicleResponsibilityGroupView vehicles={vehicles} responsibilityState={vehicleState} directoryUsers={directoryUsers} safetyNotices={safetyNotices} statusModel={supervisorStatusModel} titleKicker="MECHANIC / VEHICLE RESPONSIBILITY" chrome={safetyNoticeDialog} onBack={() => setTab("dashboard")} onSafetyNoticeOpen={notices => { const first = notices[0]; if (first) setSelectedSafetyNotices(notices); }} />;
   if (tab === "dashboard") return <main className="m3-shell mechanic-guide-dashboard">
     <section className="m3-panel">
       {safetyNoticeDialog}
       {repairBoardDetailDialog}
+      {repairBoardGuideNoticeDialog}
       {mechanicFollowPopup}
       {selectedPreDueVehicle && <Dialog open={Boolean(selectedPreDueVehicle)} onOpenChange={open => { if (!open) setSelectedPreDueVehicle(undefined); }}>
         <DialogContent className="mechanic-maintenance-detail-dialog">
@@ -1045,6 +1100,7 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
     <section className="m3-panel mechanic-subpage-panel">
       {safetyNoticeDialog}
       {repairBoardDetailDialog}
+      {repairBoardGuideNoticeDialog}
       {mechanicFollowPopup}
       {mechanicTabs}
       <div className="m3-panel-title mechanic-subpage-title"><div><p>MECHANIC / {tabTitle.toUpperCase()}</p><h2>{tabTitle}</h2><small>หน้างานช่างจากโครงหน้าแรก</small></div><div className="mechanic-header-actions"><button className="m3-back-home" onClick={() => setTab("dashboard")}><ArrowLeft size={15} /> หน้าแรกช่าง</button><ModuleLogoutButton /></div></div>
