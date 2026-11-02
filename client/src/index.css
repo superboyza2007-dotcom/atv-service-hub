@@ -14049,10 +14049,11 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
 
 /* Mechanic repair board: four-stage kanban view based on the supplied reference. */
 .mechanic-repair-board { display: grid; gap: 16px; padding: 16px; border: 1px solid rgba(103, 215, 147, .27); border-radius: 15px; background: rgba(8, 29, 30, .72); }
-.mechanic-repair-board-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid rgba(143, 186, 161, .28); color: #e1ffea; }
-.mechanic-repair-board-heading span { color: #9dafaa; font-size: 10px; letter-spacing: .08em; }
-.mechanic-repair-board-heading h3 { margin: 3px 0 0; color: #f1fff4; font-size: 21px; }
-.mechanic-repair-board-heading small { display: block; margin-top: 4px; color: #9dafaa; font-size: 11px; }
+.mechanic-repair-board-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(143, 186, 161, .28); color: #e1ffea; }
+.mechanic-repair-board-heading span { color: #9dafaa; font-size: 8px; letter-spacing: .08em; }
+.mechanic-repair-board-heading h3 { margin: 1px 0 0; color: #f1fff4; font-size: 16px; line-height: 1.15; }
+.mechanic-repair-board-heading small { display: block; margin-top: 2px; color: #9dafaa; font-size: 9px; line-height: 1.2; }
+.mechanic-repair-board-heading > svg { width: 20px; height: 20px; }
 .mechanic-repair-board-columns { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; min-width: 0; }
 .mechanic-repair-board-column { min-width: 0; min-height: 430px; overflow: hidden; border: 1px solid rgba(143, 186, 161, .3); border-radius: 10px; background: rgba(4, 18, 20, .62); }
 .mechanic-repair-board-column > header { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 58px; padding: 9px 10px; border-bottom: 3px solid #647c71; background: rgba(38, 66, 57, .86); }
@@ -14069,7 +14070,7 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
 .mechanic-repair-board-card span { color: #e2eee5; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
 .mechanic-repair-board-card small { color: #9dafaa; font-size: 10px; line-height: 1.25; }
 .mechanic-repair-board-empty { margin: auto 0; color: #779184; text-align: center; font-size: 12px; }
-@media (max-width: 720px) { .mechanic-repair-board { padding: 9px; }.mechanic-repair-board-heading h3 { font-size: 17px; }.mechanic-repair-board-columns { grid-template-columns: repeat(4, minmax(152px, 1fr)); overflow-x: auto; padding-bottom: 4px; }.mechanic-repair-board-column { min-height: 360px; }.mechanic-repair-board-list { min-height: 295px; padding: 7px; }.mechanic-repair-board-card { padding: 8px; }.mechanic-repair-board-card strong { font-size: 12px; }.mechanic-repair-board-card span { font-size: 10px; }.mechanic-repair-board-column > header { min-height: 49px; padding: 7px; }.mechanic-repair-board-column > header h4 { font-size: 11px; } }
+@media (max-width: 720px) { .mechanic-repair-board { padding: 9px; }.mechanic-repair-board-heading h3 { font-size: 14px; }.mechanic-repair-board-heading small { font-size: 8px; }.mechanic-repair-board-columns { grid-template-columns: repeat(4, minmax(152px, 1fr)); overflow-x: auto; padding-bottom: 4px; }.mechanic-repair-board-column { min-height: 360px; }.mechanic-repair-board-list { min-height: 295px; padding: 7px; }.mechanic-repair-board-card { padding: 8px; }.mechanic-repair-board-card strong { font-size: 12px; }.mechanic-repair-board-card span { font-size: 10px; }.mechanic-repair-board-column > header { min-height: 49px; padding: 7px; }.mechanic-repair-board-column > header h4 { font-size: 11px; } }
 
 .mechanic-repair-board-column.in-progress > header { border-bottom-color: #68b9e8; background: rgba(30, 76, 108, .86); }
 .mechanic-repair-board-card { gap: 0; padding: 0; }
@@ -14135,9 +14136,9 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
   }
 
   .mechanic-repair-board-column > header {
-    min-height: 48px;
+    min-height: 38px;
     gap: 2px;
-    padding: 5px 3px;
+    padding: 3px 2px;
     border-bottom-width: 2px;
   }
 
@@ -14155,8 +14156,8 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
 
   .mechanic-repair-board-list {
     min-height: 248px;
-    gap: 4px;
-    padding: 4px 3px;
+    gap: 2px;
+    padding: 3px 2px;
   }
 
   .mechanic-repair-board-card {
@@ -14164,24 +14165,24 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
   }
 
   .mechanic-repair-board-card-open {
-    gap: 3px;
-    padding: 5px 4px;
+    gap: 2px;
+    padding: 3px 2px;
   }
 
   .mechanic-repair-board-card-open strong {
     font-size: clamp(8px, 2.45vw, 11px);
-    line-height: 1.15;
+    line-height: 1.1;
   }
 
   .mechanic-repair-board-card-open span {
     font-size: clamp(7px, 2vw, 9px);
-    line-height: 1.2;
+    line-height: 1.1;
   }
 
   .mechanic-repair-board-card-open small,
   .mechanic-repair-board-card-id {
     font-size: 7px;
-    line-height: 1.1;
+    line-height: 1;
   }
 
   .mechanic-repair-board-empty {
@@ -14190,6 +14191,16 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
     overflow-wrap: anywhere;
   }
 }
+/* User-requested 75% height reduction applies to repair item cards only. */
+@media (max-width: 720px) {
+  .mechanic-repair-board-card { border-radius: 3px; }
+  .mechanic-repair-board-card-open { gap: 1px; padding: 1px; }
+  .mechanic-repair-board-card-open strong { font-size: 7px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mechanic-repair-board-card-open span { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 1; font-size: 6px; line-height: 1; }
+  .mechanic-repair-board-card-open small,
+  .mechanic-repair-board-card-id { display: none; }
+}
+
 /* Full-app demo test center */
 .full-app-demo-shell { max-width: 1180px; margin: 0 auto; padding: 28px 20px 72px; }
 .full-app-demo-hero { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 28px; border: 1px solid rgba(129,229,151,.35); }
@@ -14354,4 +14365,146 @@ h1 { margin:9px 0 5px; font-size:clamp(30px,4vw,48px); letter-spacing:-.055em; l
     font-size: 6px;
     line-height: 1.1;
   }
+}
+
+
+/* Final repair board sizing: headings at 50%; individual repair cards at 25% height. */
+@media (max-width: 720px) {
+  .mechanic-repair-board-heading { gap: 6px; padding-bottom: 6px; }
+  .mechanic-repair-board-heading span { font-size: 5px; }
+  .mechanic-repair-board-heading h3 { margin-top: 1.5px; font-size: 8.5px; line-height: 1.15; }
+  .mechanic-repair-board-heading small { margin-top: 2px; font-size: 5.5px; line-height: 1.2; }
+  .mechanic-repair-board-heading > svg { width: 12px; height: 12px; }
+  .mechanic-repair-board-column > header { min-height: 24px; gap: 1px; padding: 2px; border-bottom-width: 1.5px; }
+  .mechanic-repair-board-column > header h4 { font-size: 5.5px; line-height: 1.1; }
+  .mechanic-repair-board-column > header b { min-width: 10px; padding: 1px 2px; font-size: 5px; }
+  .mechanic-repair-board-card { border-radius: 3px; }
+  .mechanic-repair-board-card-open { gap: 1px; padding: 1px; }
+  .mechanic-repair-board-card-open strong { display: block; overflow: hidden; font-size: 7px; line-height: 1; white-space: nowrap; text-overflow: ellipsis; }
+  .mechanic-repair-board-card-open span { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 1; font-size: 6px; line-height: 1; }
+  .mechanic-repair-board-card-open small,
+  .mechanic-repair-board-card-id { display: none; }
+}
+
+
+/* Apply matching compact sizing to the lower Maintenance Structure table and its rows. */
+@media (max-width: 560px) {
+  .mechanic-pre-due-board { gap: 7px; margin-top: 8px; padding: 5px; border-radius: 8px; }
+  .mechanic-pre-due-heading { gap: 6px; padding-bottom: 6px; }
+  .mechanic-pre-due-heading span { font-size: 5px; }
+  .mechanic-pre-due-heading h3 { margin-top: 1.5px; font-size: 8px; line-height: 1.15; }
+  .mechanic-pre-due-heading small { margin-top: 2px; font-size: 5.5px; line-height: 1.2; }
+  .mechanic-pre-due-heading > svg { width: 12px; height: 12px; }
+  .mechanic-pre-due-columns { gap: 3.5px; }
+  .mechanic-pre-due-column { border-radius: 5px; }
+  .mechanic-pre-due-column > header { gap: 2px; padding: 4px; border-bottom-width: 1.5px; }
+  .mechanic-pre-due-column > header h4 { font-size: 6px; line-height: 1.1; }
+  .mechanic-pre-due-column > header b { min-width: 12px; padding: 1px 2px; font-size: 5px; }
+  .mechanic-pre-due-list { gap: 2px; padding: 3px; }
+  .mechanic-pre-due-card { gap: 1px; padding: 1.5px; border-radius: 3px; }
+  .mechanic-pre-due-card > div:first-child { gap: 1px; }
+  .mechanic-pre-due-card strong { font-size: 7px; line-height: 1; }
+  .mechanic-pre-due-card span { overflow: hidden; font-size: 5.5px; line-height: 1; white-space: nowrap; text-overflow: ellipsis; }
+  .mechanic-pre-due-card small { display: none; }
+  .mechanic-pre-due-progress { gap: 1px 2px; }
+  .mechanic-pre-due-progress b,
+  .mechanic-pre-due-progress em { font-size: 5.5px; line-height: 1; }
+  .mechanic-pre-due-progress > span { height: 2px; }
+  .mechanic-pre-due-empty { padding: 4px 2px; font-size: 5.5px; line-height: 1.1; }
+}
+
+
+/* Clickable maintenance rows and the detail popup for each selected vehicle. */
+.mechanic-pre-due-card { width: 100%; color: #fff3c8; font: inherit; text-align: left; cursor: pointer; }
+.mechanic-pre-due-card:hover { border-color: #ffe09a; background: rgba(92, 71, 28, .72); }
+.pre-due-dialog-progress { display: grid; gap: 10px; margin: 16px 0; }
+.pre-due-dialog-progress > strong { color: #fff3c8; font-size: 14px; }
+.pre-due-dialog-meter { position: relative; height: 28px; overflow: hidden; border: 1px solid rgba(255, 224, 154, .55); border-radius: 99px; background: rgba(255, 255, 255, .12); }
+.pre-due-dialog-meter > span { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: linear-gradient(90deg, #d49b36, #ffe09a); }
+.pre-due-dialog-meter > b { position: absolute; inset: 0; display: grid; place-items: center; color: #102119; font-size: 12px; text-shadow: 0 1px rgba(255,255,255,.3); }
+.pre-due-dialog-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pre-due-dialog-actions button { min-height: 42px; padding: 8px; border-radius: 8px; font-size: 12px; }
+@media (max-width: 520px) {
+  .mechanic-pre-due-dialog { padding: 14px; }
+  .pre-due-dialog-progress { gap: 8px; margin: 12px 0; }
+  .pre-due-dialog-meter { height: 24px; }
+  .pre-due-dialog-actions button { min-height: 40px; font-size: 11px; }
+}
+
+
+/* Keep the mechanic home page's scroll tail only as tall as its fixed bottom navigation. */
+@media (max-width: 520px) {
+  .m3-shell.mechanic-guide-dashboard {
+    min-height: 0;
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+
+/* Run Queue: fit the complete five-column board to phone width; keep only vertical scrolling. */
+@media (max-width: 700px) {
+  .queue-display-app { min-height: 100dvh; overflow-x: hidden; }
+  .queue-display-topbar { height: 52px; padding: 0 10px; }
+  .queue-display-brand { gap: 6px; }
+  .queue-display-brand > span { width: 27px; height: 27px; border-radius: 7px; font-size: 17px; }
+  .queue-display-brand small { font-size: 7px; }
+  .queue-display-brand strong { font-size: 12px; }
+  .queue-display-main { width: calc(100% - 12px); padding: 10px 0 20px; }
+  .queue-display-actions { gap: 5px; margin-bottom: 8px; }
+  .queue-display-actions button { padding: 6px 8px; font-size: 10px; }
+  .queue-display-table-wrap { width: 100%; overflow-x: hidden; }
+  .queue-display-table { width: 100%; min-width: 0; border-width: 2px; border-radius: 8px; }
+  .queue-display-head, .queue-display-times, .queue-display-body { grid-template-columns: 24% repeat(4, minmax(0, 1fr)); min-width: 0; }
+  .queue-display-head { min-height: 50px; }
+  .queue-display-head > div { min-width: 0; padding: 3px 1px; border-right-width: 1px; font-size: 9px; line-height: 1.1; overflow-wrap: anywhere; }
+  .queue-display-head > div:last-child { font-size: 8px; }
+  .queue-display-head small { display: block; margin: 2px 0 0; font-size: 7px; }
+  .queue-display-head strong { margin-top: 2px; font-size: 10px; }
+  .queue-display-system { grid-column: 2 / 4; }
+  .queue-display-times { min-height: 32px; font-size: 8px; line-height: 1.1; }
+  .queue-display-times > div { min-width: 0; padding: 3px 1px; border-right-width: 1px; overflow-wrap: anywhere; text-align: center; }
+  .queue-display-slot-button { min-width: 0; gap: 1px; padding: 2px 1px; border-right-width: 1px; font-size: 8px; }
+  .queue-display-slot-button small { font-size: 6px; line-height: 1.1; }
+  .queue-display-body { min-height: 0; }
+  .queue-display-left { min-width: 0; border-right-width: 1px; }
+  .queue-display-primary-list { min-height: 0; }
+  .queue-display-pair { min-height: 30px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .queue-display-pair > div { min-width: 0; min-height: 30px; padding: 3px 1px; border-right-width: 1px; border-bottom-width: 1px; font-size: 8px; line-height: 1.05; overflow-wrap: anywhere; }
+  .queue-display-member-copy { gap: 1px; }
+  .queue-display-member-copy b { font-size: 7px; line-height: 1.05; }
+  .queue-display-member-copy small { font-size: 6px; line-height: 1; }
+  .queue-display-status-row { min-height: 25px; }
+  .queue-display-status-row > div { border-right-width: 1px; border-bottom-width: 1px; font-size: 8px; }
+  .queue-display-colored { min-height: 40px; }
+  .queue-display-colored > div { font-size: 8px; }
+  .queue-display-colored span { margin-top: 1px; font-size: 6px; line-height: 1; }
+  .queue-display-create-session { width: calc(100% - 6px); margin-top: 4px; padding: 5px 2px; font-size: 7px; line-height: 1.1; overflow-wrap: anywhere; }
+  .queue-display-daily-column { min-width: 0; min-height: 180px; gap: 4px; padding: 3px 2px; border-right-width: 1px; }
+  .queue-display-daily-session-list { min-height: 0; gap: 3px; }
+  .queue-display-daily-empty { min-height: 90px; padding: 3px 1px; font-size: 7px; line-height: 1.1; overflow-wrap: anywhere; }
+  .queue-display-active-mirror { grid-template-columns: 1fr; gap: 2px; padding: 4px 3px; border-left-width: 2px; }
+  .queue-display-active-mirror b { font-size: 7px; }
+  .queue-display-active-mirror span, .queue-display-active-mirror small { font-size: 6px; text-align: left; }
+  .queue-display-daily-session { min-height: 40px; padding: 3px 2px; }
+  .queue-display-daily-session > strong { font-size: 7px; }
+  .queue-display-daily-session-head em { font-size: 6px; }
+  .queue-display-daily-session > span:not(.queue-display-daily-session-head) { font-size: 6px; }
+  .queue-display-daily-session small { font-size: 6px; }
+  .queue-display-section-history-button { padding: 4px 1px; font-size: 6px; line-height: 1.1; overflow-wrap: anywhere; }
+  .queue-display-footer { min-height: 30px; padding: 5px 6px; font-size: 7px; line-height: 1.1; }
+}
+
+
+@media (max-width: 700px) {
+  .queue-display-body { min-height: clamp(220px, calc(100dvh - 396px), 620px); }
+  .queue-display-daily-column { min-height: 0; }
+}
+
+
+@media (max-width: 700px) {
+  .queue-display-left { display: flex; flex-direction: column; }
+  .queue-display-primary-list { flex: 1 1 auto; }
+  .queue-display-status-row,
+  .queue-display-colored,
+  .queue-display-create-session { flex: 0 0 auto; }
 }

@@ -7,6 +7,7 @@ type DisconnectedVehicleStatusCardsProps = {
   safetyNotices: Array<{ vehicleNumber: number }>;
   onOpenGroupView: () => void;
   statusModel: SupervisorUserDirectoryStatusModel;
+  showCcCards?: boolean;
 };
 
 type StatusMetric = keyof SupervisorCcStatusModel["summary"];
@@ -21,10 +22,10 @@ const STATUS_METRICS: Array<{ key: StatusMetric; label: string; className: strin
 ];
 
 /** Shared CC cards for Mechanic and Supervisor. The only data plug is the Supervisor User Directory model. */
-export function DisconnectedVehicleStatusCards({ vehicles, safetyNotices, onOpenGroupView, statusModel }: DisconnectedVehicleStatusCardsProps) {
+export function DisconnectedVehicleStatusCards({ vehicles, safetyNotices, onOpenGroupView, statusModel, showCcCards = true }: DisconnectedVehicleStatusCardsProps) {
   return (
     <div className="m3-status-cards m3-disconnected-status-cards" aria-label="สถานะรถตามมาตรฐาน Guide">
-      <div className="m3-cc-card-grid">
+      {showCcCards && <div className="m3-cc-card-grid">
         {(["200", "250"] as const).map(cc => {
           const status = statusModel.byCc[cc];
           return (
@@ -41,7 +42,7 @@ export function DisconnectedVehicleStatusCards({ vehicles, safetyNotices, onOpen
             </div>
           );
         })}
-      </div>
+      </div>}
       <GuideVehicleStatusSummary vehicles={vehicles} safetyNotices={safetyNotices} statusModel={statusModel} onOpen={onOpenGroupView} />
     </div>
   );
