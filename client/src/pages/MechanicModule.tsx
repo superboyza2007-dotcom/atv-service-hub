@@ -41,6 +41,7 @@ import { useCanonicalAppDirectory } from "@/hooks/useCanonicalAppDirectory";
 import { showBrowserNotification } from "@/lib/browser-notification";
 import { FULL_APP_DEMO_REPAIR_REPORTS, isFullAppDemo } from "@/lib/full-app-demo";
 import SpeechSettingsPanel from "@/components/SpeechSettingsPanel";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type MechanicTab = "dashboard" | "status" | "tips" | "roundTable" | "communication" | "roundChange" | "settings" | "repair" | "repairBoard" | "waitingParts" | "log";
 type MechanicFollowSession = PayoutSessionLike & { sessionId: string; status: "Active" | "Standby" | "Completed"; startedAt?: string; scheduledEndAt?: string; timerEnabled?: boolean; expiryBehavior?: "auto_complete" | "overtime"; completedAt?: string; completedById?: string; completedByName?: string; activeUserName?: string; vehicleIds?: string[]; riderCount?: number; passengerCount?: number; overtimeAcknowledged?: boolean; completionTiming?: ReturnType<typeof sessionCompletionTiming>; activityLog?: SessionActivity[] };
@@ -169,6 +170,7 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
   const [editingMaintenanceThresholds, setEditingMaintenanceThresholds] = useState<Record<VehicleCc, string>>({ 200: "", 250: "" });
   const [roundChangeView, setRoundChangeView] = useState<"vehicles" | "alerts">("vehicles");
   const [maintenanceViewRuleId, setMaintenanceViewRuleId] = useState<string>();
+  const [selectedPreDueVehicle, setSelectedPreDueVehicle] = useState<{ number: number; cc: VehicleCc }>();
   const [maintenanceResetHours, setMaintenanceResetHours] = useState<Record<string, number>>({});
   const [pendingMaintenanceReset, setPendingMaintenanceReset] = useState<PendingMaintenanceReset>();
   const [roundPageOffset, setRoundPageOffset] = useState(() => new Date().getDate() >= 16 ? 1 : 0);
@@ -537,6 +539,13 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
       .filter(row => row.thresholdHours > 0 && row.progress >= 85 && row.progress < 100)
       .sort((left, right) => right.progress - left.progress),
   }));
+  const selectedPreDueRow = selectedPreDueVehicle
+    ? maintenanceTableGroups.find(group => group.cc === selectedPreDueVehicle.cc)?.rows.find(row => row.number === selectedPreDueVehicle.number)
+    : undefined;
+  const selectedPreDueAlert = selectedPreDueVehicle
+    ? maintenanceAlerts.find(alert => alert.ruleId === activeMaintenanceRule?.id && Number(alert.vehicleNumber) === selectedPreDueVehicle.number)
+    : undefined;
+  const selectedPreDueNotificationSent = Boolean(selectedPreDueVehicle && activeMaintenanceRule && hasVehicleMaintenanceNotification(maintenanceNotifications, activeMaintenanceRule.id, selectedPreDueVehicle.number));
   const dueMaintenanceAlerts = maintenanceAlerts.filter(alert => alert.due);
   useEffect(() => {
     if (!mechanicStateQuery.isSuccess || !supervisorFleetSnapshotQuery.isSuccess) return;
@@ -992,6 +1001,26 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
       {safetyNoticeDialog}
       {repairBoardDetailDialog}
       {mechanicFollowPopup}
+      {selectedPreDueVehicle && <Dialog open={Boolean(selectedPreDueVehicle)} onOpenChange={open => { if (!open) setSelectedPreDueVehicle(undefined); }}>
+        <DialogContent className="mechanic-maintenance-detail-dialog">
+          {selectedPreDueRow ? <>
+            <DialogHeader className="mechanic-maintenance-detail-header">
+              <span>MAINTENANCE DETAIL / {selectedPreDueVehicle.cc} CC</span>
+              <DialogTitle>รถ #{selectedPreDueRow.number} · {activeMaintenanceRule?.name ?? "รายการบำรุงรักษา"}</DialogTitle>
+              <DialogDescription>{vehicleResponsibilityMeta(selectedPreDueRow.number).groupLabel} · {vehicleResponsibilityMeta(selectedPreDueRow.number).managerLabel}</DialogDescription>
+            </DialogHeader>
+            <div className={`mechanic-maintenance-detail-meter ${selectedPreDueRow.level}`}>
+              <div className="mechanic-maintenance-detail-meter-heading"><strong>{activeMaintenanceRule?.name ?? "รายการบำรุงรักษา"}</strong><b>{selectedPreDueRow.progress.toFixed(0)}%</b></div>
+              <div className="mechanic-maintenance-detail-meter-track" role="progressbar" aria-label={`${activeMaintenanceRule?.name ?? "รายการบำรุงรักษา"} รถหมายเลข ${selectedPreDueRow.number}`} aria-valuenow={Math.min(100, Math.round(selectedPreDueRow.progress))} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.min(100, selectedPreDueRow.progress)}%` }} /></div>
+              <div className="mechanic-maintenance-detail-meter-caption"><span>{selectedPreDueRow.accumulatedHours.toFixed(1)} / {selectedPreDueRow.thresholdHours.toFixed(1)} ชั่วโมง</span><span>เหลือ {Math.max(0, selectedPreDueRow.thresholdHours - selectedPreDueRow.accumulatedHours).toFixed(1)} ชั่วโมง</span></div>
+            </div>
+            <div className="mechanic-maintenance-detail-actions">
+              <button type="button" className={`mechanic-notify-guide ${selectedPreDueNotificationSent ? "is-sent" : ""}`} onClick={() => { if (selectedPreDueAlert && !selectedPreDueNotificationSent) notifyGuideForMaintenance(selectedPreDueAlert); }} disabled={selectedPreDueNotificationSent || !activeMaintenanceRule || !selectedPreDueAlert} title={selectedPreDueNotificationSent ? "ส่งแจ้งให้ไกด์แล้ว" : "ส่งแจ้งให้ไกด์นำรถมาเพื่อเปลี่ยนตามรายการ"}>{selectedPreDueNotificationSent ? "ส่งแจ้งแล้ว" : "ส่งแจ้งไกด์"}</button>
+              <button type="button" className="mechanic-clear-hours" onClick={() => { const vehicleNumber = selectedPreDueRow.number; setSelectedPreDueVehicle(undefined); clearMaintenanceVehicleHours(vehicleNumber); }} disabled={!activeMaintenanceRule || selectedPreDueRow.accumulatedHours <= 0}>เคลียร์ชั่วโมง</button>
+            </div>
+          </> : <p className="mechanic-maintenance-detail-unavailable">ไม่พบข้อมูลการบำรุงรักษาของรถคันนี้</p>}
+        </DialogContent>
+      </Dialog>}
       {selectedMechanicFollowSession ? mechanicActiveDetail : <>{mechanicTabs}
       <div className="m3-panel-title"><div><p>MECHANIC / STATUS VIEW</p><h2>สถานะรถ ATV ของช่าง</h2><small className="m3-demo-badge">สถานะรถจากแหล่งข้อมูลเดียวกับโมดูลไกด์</small></div><div className="mechanic-header-actions"><button className="m3-icon-button" onClick={() => { void supervisorFleetSnapshotQuery.refetch(); }} aria-label="รีเฟรชข้อมูลรถ"><RefreshCw size={16} /></button><ModuleLogoutButton /></div></div>
       <DisconnectedVehicleStatusCards vehicles={vehicles} safetyNotices={safetyNotices} statusModel={supervisorStatusModel} onOpenGroupView={() => setTab("status")} />
@@ -1002,7 +1031,7 @@ export default function MechanicModule({ guideTipsOnly = false }: { guideTipsOnl
         <div className="mechanic-pre-due-columns">
           {preDueMaintenanceGroups.map(group => <section className="mechanic-pre-due-column" key={group.cc} aria-labelledby={`mechanic-pre-due-${group.cc}`}>
             <header><h4 id={`mechanic-pre-due-${group.cc}`}>{group.cc} cc</h4><b>{group.rows.length}</b></header>
-            <div className="mechanic-pre-due-list">{group.rows.length ? group.rows.map(row => <article key={row.number} className="mechanic-pre-due-card"><div><strong>รถ #{row.number}</strong><span>{vehicleResponsibilityMeta(row.number).groupLabel}</span><small>{vehicleResponsibilityMeta(row.number).managerLabel}</small></div><div className="mechanic-pre-due-progress"><b>{row.accumulatedHours.toFixed(1)} / {row.thresholdHours.toFixed(1)} ชม.</b><span><i style={{ width: `${Math.min(100, row.progress)}%` }} /></span><em>{row.progress.toFixed(0)}%</em></div></article>) : <p className="mechanic-pre-due-empty">ยังไม่มีรถถึง 85%</p>}</div>
+            <div className="mechanic-pre-due-list">{group.rows.length ? group.rows.map(row => <button type="button" key={row.number} className="mechanic-pre-due-card" onClick={() => setSelectedPreDueVehicle({ number: row.number, cc: group.cc })} aria-haspopup="dialog" aria-label={`ดูรายละเอียด ${activeMaintenanceRule?.name ?? "รายการบำรุงรักษา"} รถ #${row.number} ใช้ไป ${row.progress.toFixed(0)} เปอร์เซ็นต์`}><div><strong>รถ #{row.number}</strong><span>{vehicleResponsibilityMeta(row.number).groupLabel}</span><small>{vehicleResponsibilityMeta(row.number).managerLabel}</small></div><div className="mechanic-pre-due-progress"><b>{row.accumulatedHours.toFixed(1)} / {row.thresholdHours.toFixed(1)} ชม.</b><span><i style={{ width: `${Math.min(100, row.progress)}%` }} /></span><em>{row.progress.toFixed(0)}%</em></div></button>) : <p className="mechanic-pre-due-empty">ยังไม่มีรถถึง 85%</p>}</div>
           </section>)}
         </div>
       </section>
